@@ -52,7 +52,7 @@ export async function generateArchiveDocs(
       await safeWrite(
         files,
         errors,
-        joinPath(options.outputDir, `${sanitizeFileName(record.archiveCode)}_案卷大封面.docx`),
+        joinPath(options.outputDir, coverFileName(record)),
         () => renderDocx(templates.cover!, coverData(record)),
         writeFile,
       );
@@ -72,7 +72,7 @@ export async function generateArchiveDocs(
   if (templates.spine) {
     const groups = chunk(selected, 7);
     for (const [index, group] of groups.entries()) {
-      const fileName = `案卷脊背_${String(index + 1).padStart(3, "0")}.docx`;
+      const fileName = spineFileName(group, index);
       await safeWrite(
         files,
         errors,
@@ -109,8 +109,24 @@ export function noteData(record: ArchiveRecord, backupNote: string): Record<stri
   };
 }
 
+export function coverFileName(record: ArchiveRecord): string {
+  return `${sanitizeFileName(record.archiveCode + record.fullTitle)}案卷大封面.docx`;
+}
+
 export function noteFileName(record: ArchiveRecord): string {
   return `${sanitizeFileName(record.archiveCode + record.fullTitle)}备考表.docx`;
+}
+
+export function spineFileName(records: ArchiveRecord[], index = 0): string {
+  if (records.length === 1) {
+    const record = records[0];
+    return `${sanitizeFileName(record.archiveCode + record.fullTitle)}案卷脊背.docx`;
+  }
+
+  const first = records[0]?.archiveCode ?? String(index + 1).padStart(3, "0");
+  const last = records[records.length - 1]?.archiveCode;
+  const range = last && last !== first ? `${first}-${last}` : first;
+  return `${sanitizeFileName(range)}案卷脊背.docx`;
 }
 
 export function spineData(records: ArchiveRecord[]): Record<string, string | number> {

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
-import { coverData, noteData, noteFileName, renderDocx, spineData } from "../lib/docx";
+import { coverData, coverFileName, noteData, noteFileName, renderDocx, spineData, spineFileName } from "../lib/docx";
 import { parseArchiveWorkbook } from "../lib/excel";
 
 const records = parseArchiveWorkbook(readFileSync("../预立卷档案总目录（高明）(5).xlsx"));
@@ -36,6 +36,18 @@ describe("renderDocx", () => {
   it("names note files with archive code and title", () => {
     expect(noteFileName(record)).toBe(
       "5028G01-0011-842-001中核汇能高明创楷3.58904MWp分布式光伏项目 二次设备试验备考表.docx",
+    );
+  });
+
+  it("names cover files with archive code and title", () => {
+    expect(coverFileName(record)).toBe(
+      "5028G01-0011-842-001中核汇能高明创楷3.58904MWp分布式光伏项目 二次设备试验案卷大封面.docx",
+    );
+  });
+
+  it("names spine files with archive code and title for a single record", () => {
+    expect(spineFileName([record])).toBe(
+      "5028G01-0011-842-001中核汇能高明创楷3.58904MWp分布式光伏项目 二次设备试验案卷脊背.docx",
     );
   });
 
