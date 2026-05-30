@@ -11,7 +11,7 @@
     {
       "sequence": 2,
       "kind": "xlsx",
-      "originalName": "2、5028G01-SG-ZHHC-01-001高明分布式项目 光伏方阵安装子单位工程质量验收记录（汇总用）.xls",
+      "originalName": "2、5028G01-SG-ZHHC-01-001高明分布式项目 光伏方阵安装子单位工程质量验收记录（汇总用）.xlsx",
       "templateFile": "子单位工程质量验收记录.xlsx",
       "outputExtension": ".xlsx"
     },
@@ -39,7 +39,7 @@
     {
       "sequence": 4,
       "kind": "xlsx",
-      "originalName": "4、5028G01-SG-ZHHC-01-01-001子方阵电气安装分部工程质量验收记录（汇总用）.xls",
+      "originalName": "4、5028G01-SG-ZHHC-01-01-001子方阵电气安装分部工程质量验收记录（汇总用）.xlsx",
       "templateFile": "子方阵支架及组件安装分部工程质量验收记录（汇总用）.xlsx",
       "outputExtension": ".xlsx"
     },
@@ -53,63 +53,63 @@
     {
       "sequence": 0,
       "kind": "xlsx",
-      "originalName": "5、5028G01-SG-ZHHC-01-01-01-001 支架安装分项工程质量验收表1#厂房.xls",
+      "originalName": "5、5028G01-SG-ZHHC-01-01-01-001 支架安装分项工程质量验收表1#厂房.xlsx",
       "templateFile": "厂房支架安装分项工程质量验收表.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 9,
       "kind": "xlsx",
-      "originalName": "9、5028G01-SG-ZHHC-01-01-05-001支架安装分项工程质量验收表综合楼.xls",
+      "originalName": "9、5028G01-SG-ZHHC-01-01-05-001支架安装分项工程质量验收表综合楼.xlsx",
       "templateFile": "综合楼支架安装分项工程质量验收表.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 0,
       "kind": "xlsx",
-      "originalName": "10、5028G01-SG-ZHHC-01-01-06-001光伏组件安装分项工程质量验收表1#厂房.xls",
+      "originalName": "10、5028G01-SG-ZHHC-01-01-06-001光伏组件安装分项工程质量验收表1#厂房.xlsx",
       "templateFile": "厂房光伏组件安装分项工程质量验收表.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 14,
       "kind": "xlsx",
-      "originalName": "14、5028G01-SG-ZHHC-01-01-10-001光伏组件安装分项工程质量验收表综合楼.xls",
+      "originalName": "14、5028G01-SG-ZHHC-01-01-10-001光伏组件安装分项工程质量验收表综合楼.xlsx",
       "templateFile": "综合楼光伏组件安装分项工程质量验收表.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 15,
       "kind": "xlsx",
-      "originalName": "15、光伏组件支架防腐记录.xls",
+      "originalName": "15、光伏组件支架防腐记录.xlsx",
       "templateFile": "光伏组件支架防腐记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 16,
       "kind": "xlsx",
-      "originalName": "16、组串开路电压、短路电流测量记录.xls",
+      "originalName": "16、组串开路电压、短路电流测量记录.xlsx",
       "templateFile": "组串开路电压短路电流测量记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 17,
       "kind": "xlsx",
-      "originalName": "17、组件安装施工记录.xls",
+      "originalName": "17、组件安装施工记录.xlsx",
       "templateFile": "组件安装施工记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 18,
       "kind": "xlsx",
-      "originalName": "18、组件边缘高差测量记录.xls",
+      "originalName": "18、组件边缘高差测量记录.xlsx",
       "templateFile": "组件边缘高差测量记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 19,
       "kind": "xlsx",
-      "originalName": "19、组件倾斜角度偏差测量记录.xls",
+      "originalName": "19、组件倾斜角度偏差测量记录.xlsx",
       "templateFile": "组件倾斜角度偏差测量记录.xlsx",
       "outputExtension": ".xlsx"
     },
@@ -130,35 +130,35 @@
     {
       "sequence": 21,
       "kind": "xlsx",
-      "originalName": "21、5028G01-SG-ZHHC-01-02-001通用工程分部工程质量验收记录（汇总用）.xls",
+      "originalName": "21、5028G01-SG-ZHHC-01-02-001通用工程分部工程质量验收记录（汇总用）.xlsx",
       "templateFile": "通用工程分部工程质量验收记录（汇总用）.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 22,
       "kind": "xlsx",
-      "originalName": "22、5028G01-SG-ZHHC-01-02-01-001建筑电气工程分项工程质量验收记录.xls",
+      "originalName": "22、5028G01-SG-ZHHC-01-02-01-001建筑电气工程分项工程质量验收记录.xlsx",
       "templateFile": "建筑电气工程分项工程质量验收记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 0,
       "kind": "xlsx",
-      "originalName": "23、5028G01-SG-ZHHC-01-02-01-01-001接地装置安装检验批质量验收记录1#厂房.xls",
+      "originalName": "23、5028G01-SG-ZHHC-01-02-01-01-001接地装置安装检验批质量验收记录1#厂房.xlsx",
       "templateFile": "厂房接地装置安装检验批质量验收记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 27,
       "kind": "xlsx",
-      "originalName": "27、5028G01-SG-ZHHC-01-02-01-05-001接地装置安装检验批质量验收记录综合楼.xls",
+      "originalName": "27、5028G01-SG-ZHHC-01-02-01-05-001接地装置安装检验批质量验收记录综合楼.xlsx",
       "templateFile": "综合楼接地装置安装检验批质量验收记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 28,
       "kind": "xlsx",
-      "originalName": "28、组件接地检查记录.xls",
+      "originalName": "28、组件接地检查记录.xlsx",
       "templateFile": "组件接地检查记录.xlsx",
       "outputExtension": ".xlsx"
     },
@@ -179,42 +179,42 @@
     {
       "sequence": 30,
       "kind": "xlsx",
-      "originalName": "30、5028G01-SG-ZHHC-01-03-001主体结构工程分部工程质量验收记录（汇总用）.xls",
+      "originalName": "30、5028G01-SG-ZHHC-01-03-001主体结构工程分部工程质量验收记录（汇总用）.xlsx",
       "templateFile": "主体结构工程分部工程质量验收记录（汇总用）.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 31,
       "kind": "xlsx",
-      "originalName": "31、5028G01-SG-ZHHC-01-03-01-001紧固件连接分项工程质量验收记录.xls",
+      "originalName": "31、5028G01-SG-ZHHC-01-03-01-001紧固件连接分项工程质量验收记录.xlsx",
       "templateFile": "紧固件连接分项工程质量验收记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 0,
       "kind": "xlsx",
-      "originalName": "32、5028G01-SG-ZHHC-01-03-01-01-001钢结构（普通紧固件连接）工程检验批质量验收记录1#厂房.xls",
+      "originalName": "32、5028G01-SG-ZHHC-01-03-01-01-001钢结构（普通紧固件连接）工程检验批质量验收记录1#厂房.xlsx",
       "templateFile": "厂房普通紧固件连接工程检验批质量验收记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 0,
       "kind": "xlsx",
-      "originalName": "36、5028G01-SG-ZHHC-01-03-01-01-005钢结构（高强度螺栓）连接工程检验批质量验收记录1#厂房.xls",
+      "originalName": "36、5028G01-SG-ZHHC-01-03-01-01-005钢结构（高强度螺栓）连接工程检验批质量验收记录1#厂房.xlsx",
       "templateFile": "厂房高强度螺栓连接工程检验批质量验收记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 40,
       "kind": "xlsx",
-      "originalName": "40、5028G01-SG-ZHHC-01-03-02-001钢结构（墙架、檩条、支撑系统）组装分项工程质量验收记录.xls",
+      "originalName": "40、5028G01-SG-ZHHC-01-03-02-001钢结构（墙架、檩条、支撑系统）组装分项工程质量验收记录.xlsx",
       "templateFile": "墙架檩条支撑系统组装分项工程质量验收记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {
       "sequence": 0,
       "kind": "xlsx",
-      "originalName": "41、5028G01-SG-ZHHC-01-03-02-01-001钢结构（墙架、檩条、支撑系统）组装工程检验批质量验收记录1#厂房.xls",
+      "originalName": "41、5028G01-SG-ZHHC-01-03-02-01-001钢结构（墙架、檩条、支撑系统）组装工程检验批质量验收记录1#厂房.xlsx",
       "templateFile": "厂房墙架檩条支撑系统组装工程检验批质量验收记录.xlsx",
       "outputExtension": ".xlsx"
     }
