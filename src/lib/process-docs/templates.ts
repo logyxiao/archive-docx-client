@@ -67,46 +67,51 @@ function matchingDivisionTemplates(title: string, templates: ProcessTemplate[]):
 }
 
 function matchingSubitemTemplates(title: string, templates: ProcessTemplate[]): ProcessTemplate[] {
+  const templateFiles = ["分项工程报验申请单.docx"];
   if (title.includes("支架安装")) {
-    return findByTemplateFiles(templates, [
-      "分项工程报验申请单.docx",
-      `${buildingTemplatePrefix(title)}支架安装分项工程质量验收表.xlsx`,
-    ]);
+    templateFiles.push(`${buildingTemplatePrefix(title)}支架安装分项工程质量验收表.xlsx`);
+    return findByTemplateFiles(templates, templateFiles);
   }
   if (title.includes("光伏组件安装")) {
-    return findByTemplateFiles(templates, [
-      "分项工程报验申请单.docx",
-      `${buildingTemplatePrefix(title)}光伏组件安装分项工程质量验收表.xlsx`,
-    ]);
+    templateFiles.push(`${buildingTemplatePrefix(title)}光伏组件安装分项工程质量验收表.xlsx`);
+    return findByTemplateFiles(templates, templateFiles);
   }
   if (title.includes("建筑电气")) {
-    return findByTemplateFiles(templates, ["分项工程报验申请单.docx", "建筑电气工程分项工程质量验收记录.xlsx"]);
+    templateFiles.push("建筑电气工程分项工程质量验收记录.xlsx");
+    return findByTemplateFiles(templates, templateFiles);
   }
   if (isElectricalSubitemTitle(title)) {
-    return findByTemplateFiles(templates, ["分项工程报验申请单.docx", "建筑电气工程分项工程质量验收记录.xlsx"]);
+    templateFiles.push("建筑电气工程分项工程质量验收记录.xlsx", ...inspectionLotTemplateFilesForTitle(title));
+    return findByTemplateFiles(templates, templateFiles);
   }
   if (title.includes("紧固件连接")) {
-    return findByTemplateFiles(templates, ["分项工程报验申请单.docx", "紧固件连接分项工程质量验收记录.xlsx"]);
+    templateFiles.push("紧固件连接分项工程质量验收记录.xlsx");
+    return findByTemplateFiles(templates, templateFiles);
   }
   if (title.includes("组装")) {
-    return findByTemplateFiles(templates, ["分项工程报验申请单.docx", "墙架檩条支撑系统组装分项工程质量验收记录.xlsx"]);
+    templateFiles.push("墙架檩条支撑系统组装分项工程质量验收记录.xlsx");
+    return findByTemplateFiles(templates, templateFiles);
   }
   return [];
 }
 
 function matchingInspectionLotTemplates(title: string, templates: ProcessTemplate[]): ProcessTemplate[] {
+  return findByTemplateFiles(templates, inspectionLotTemplateFilesForTitle(title));
+}
+
+function inspectionLotTemplateFilesForTitle(title: string): string[] {
   const building = buildingTemplatePrefix(title);
   if (title.includes("接地装置安装")) {
-    return findByTemplateFiles(templates, [`${building}接地装置安装检验批质量验收记录.xlsx`]);
+    return [`${building}接地装置安装检验批质量验收记录.xlsx`];
   }
   if (title.includes("普通紧固件连接") || /紧固件连接工程检验批质量验收记录/.test(title)) {
-    return findByTemplateFiles(templates, [`${building}普通紧固件连接工程检验批质量验收记录.xlsx`]);
+    return [`${building}普通紧固件连接工程检验批质量验收记录.xlsx`];
   }
   if (title.includes("高强度螺栓")) {
-    return findByTemplateFiles(templates, [`${building}高强度螺栓连接工程检验批质量验收记录.xlsx`]);
+    return [`${building}高强度螺栓连接工程检验批质量验收记录.xlsx`];
   }
   if (title.includes("墙架") || title.includes("檩条") || title.includes("支撑系统")) {
-    return findByTemplateFiles(templates, [`${building}墙架檩条支撑系统组装工程检验批质量验收记录.xlsx`]);
+    return [`${building}墙架檩条支撑系统组装工程检验批质量验收记录.xlsx`];
   }
   return [];
 }

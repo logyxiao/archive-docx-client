@@ -126,20 +126,7 @@ describe("process docs generation", () => {
       stubProcessFetch();
       const subunitRecord: ArchiveRecord = {
         ...processRecord,
-        items: [
-          {
-            ...processRecord.items[0],
-            sequence: "1",
-            fileCode: "5028G01-SG-ZHHC-KG-01",
-            title: "高明分布式项目 并网点光伏发电系统单位工程开工报审",
-          },
-          {
-            ...processRecord.items[4],
-            sequence: "5",
-            fileCode: "5028G01-SG-ZHHC-01-001",
-            title: "高明分布式项目 光伏方阵安装子单位工程质量报验申请及验收记录",
-          },
-        ],
+        items: createSubunitSummaryFixtureItems(),
       };
       const written: Uint8Array[] = [];
       const paths: string[] = [];
@@ -291,7 +278,7 @@ describe("process docs generation", () => {
       expect(result.errors).toEqual([]);
     });
 
-    it("does not generate any template by sequence fallback when item titles do not match explicit rules", async () => {
+    it("generates explicitly supported 8312-002 electrical process templates", async () => {
       stubProcessFetch();
       const record8312002: ArchiveRecord = {
         ...processRecord,
@@ -325,8 +312,13 @@ describe("process docs generation", () => {
         },
       );
 
-      expect(result.files).toHaveLength(0);
-      expect(paths).toEqual([]);
+      expect(result.files).toHaveLength(4);
+      expect(fileNames(paths)).toEqual([
+        "3、5028G01-SG-ZHHC-02-01-001子方阵场电气安装分部工程报验申请单.docx",
+        "3、5028G01-SG-ZHHC-02-01-001子方阵场电气安装分部工程质量验收记录（汇总用）.xlsx",
+        "20、5028G01-SG-ZHHC-02-02-03-002#2光伏升压变电缆防火阻燃施工分项工程报验申请单.docx",
+        "20、5028G01-SG-ZHHC-02-02-03-002#2光伏升压变电缆防火阻燃施工分项工程质量验收记录.xlsx",
+      ]);
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
     });
@@ -585,4 +577,30 @@ function createProcessRecord(): ArchiveRecord {
     textPages: 94,
     items,
   };
+}
+
+function createSubunitSummaryFixtureItems() {
+  const base = processRecord.items[0];
+  const item = (sequence: number, title: string, fileCode = `5028G01-SG-ZHHC-SUM-${String(sequence).padStart(3, "0")}`) => ({
+    ...base,
+    sequence: String(sequence),
+    fileCode,
+    title,
+  });
+
+  return [
+    item(1, "高明分布式项目 并网点光伏发电系统单位工程开工报审", "5028G01-SG-ZHHC-KG-01"),
+    item(2, "高明分布式项目 光伏方阵安装子单位工程质量报验申请及验收记录", "5028G01-SG-ZHHC-01-001"),
+    item(3, "高明分布式项目 子方阵支架及组件安装分部工程质量报验申请及验收记录"),
+    ...Array.from({ length: 10 }, (_, index) =>
+      item(4 + index, `高明分布式项目 ${index + 1}#厂房支架安装分项工程质量报验申请及验收记录`),
+    ),
+    item(14, "高明分布式项目 通用工程分部工程质量报验申请及验收记录"),
+    ...Array.from({ length: 5 }, (_, index) =>
+      item(15 + index, `高明分布式项目 通用工程第${index + 1}项分项工程质量报验申请及验收记录`),
+    ),
+    item(20, "高明分布式项目 主体工程分部工程质量报验申请及验收记录"),
+    item(21, "高明分布式项目 主体工程普通紧固件连接分项工程质量报验申请及验收记录"),
+    item(22, "高明分布式项目 主体工程高强度螺栓连接分项工程质量报验申请及验收记录"),
+  ];
 }

@@ -23,8 +23,12 @@ function outputTitle(template: ProcessTemplate, title: string): string {
     return `${stripProjectPrefix(acceptanceStem)}报验申请单`;
   }
 
+  if (template.kind === "xlsx" && template.originalName.includes("检验批质量验收记录")) {
+    return `${stripProjectPrefix(acceptanceStem).replace(/\s*分项工程\s*$/, "").replace(/\s*检验批质量验收记录\s*$/, "")}检验批质量验收记录`;
+  }
+
   if (template.kind === "xlsx" && template.originalName.includes("质量验收记录")) {
-    return `${acceptanceStem}${template.originalName.includes("汇总用") ? "质量验收记录（汇总用）" : "质量验收记录"}`;
+    return `${stripProjectPrefix(acceptanceStem)}${template.originalName.includes("汇总用") ? "质量验收记录（汇总用）" : "质量验收记录"}`;
   }
 
   return cleanTitle;
