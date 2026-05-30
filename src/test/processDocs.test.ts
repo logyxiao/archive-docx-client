@@ -405,7 +405,7 @@ describe("process docs generation", () => {
   describe("xlsx rendering", () => {
     it("fills xlsx source fields and clears source-missing fields", async () => {
     const item = processRecord.items[4];
-    const template = readPublic("/templates/process-docs/template-008.xlsx");
+    const template = readPublic("/templates/process-docs/厂房支架安装分项工程质量验收表.xlsx");
     const workbook = await workbookFrom(
       await renderProcessWorkbook(template, processRecord, item, {
         projectName: "测试自定义工程名称",
@@ -437,7 +437,7 @@ describe("process docs generation", () => {
 
     it("leaves optional process fields blank when users do not fill them", async () => {
     const item = processRecord.items[4];
-    const template = readPublic("/templates/process-docs/template-008.xlsx");
+    const template = readPublic("/templates/process-docs/厂房支架安装分项工程质量验收表.xlsx");
     const workbook = await workbookFrom(await renderProcessWorkbook(template, processRecord, item));
     const sheet = workbook.worksheets[0];
 
@@ -451,7 +451,7 @@ describe("process docs generation", () => {
 
     it("treats blank user fields as not filled", async () => {
     const item = processRecord.items[4];
-    const template = readPublic("/templates/process-docs/template-008.xlsx");
+    const template = readPublic("/templates/process-docs/厂房支架安装分项工程质量验收表.xlsx");
     const workbook = await workbookFrom(
       await renderProcessWorkbook(template, processRecord, item, {
         generalContractorUnit: "",
@@ -466,7 +466,7 @@ describe("process docs generation", () => {
 
     it("reuses construction technical leader for professional foreman fields", async () => {
     const item = processRecord.items[35];
-    const template = readPublic("/templates/process-docs/template-037.xlsx");
+    const template = readPublic("/templates/process-docs/厂房接地装置安装检验批质量验收记录.xlsx");
     const workbook = await workbookFrom(
       await renderProcessWorkbook(template, processRecord, item, {
         constructionTechnicalLeader: "施工技术负责人",
@@ -479,7 +479,7 @@ describe("process docs generation", () => {
 
     it("fills numeric self-check values within quality standard ranges", async () => {
     const item = processRecord.items[43];
-    const template = readPublic("/templates/process-docs/template-061.xlsx");
+    const template = readPublic("/templates/process-docs/厂房墙架檩条支撑系统组装工程检验批质量验收记录.xlsx");
     const workbook = await workbookFrom(await renderProcessWorkbook(template, processRecord, item));
     const sheet = workbook.worksheets[0];
     const values = ["V14", "W14", "X14", "Y14", "Z14", "AA14", "AB14", "AC14", "AD14", "AE14"]
@@ -491,7 +491,7 @@ describe("process docs generation", () => {
 
     it("fills merged quality result values when templates use quality acceptance result columns", async () => {
     const item = processRecord.items[4];
-    const template = readPublic("/templates/process-docs/template-008.xlsx");
+    const template = readPublic("/templates/process-docs/厂房支架安装分项工程质量验收表.xlsx");
     const workbook = await workbookFrom(await renderProcessWorkbook(template, processRecord, item));
     const sheet = workbook.worksheets[0];
     const values = String(sheet.getCell("V21").value)
@@ -508,9 +508,9 @@ describe("process docs generation", () => {
     it("keeps summary workbook header merge and style intact", async () => {
     const summaryTemplates = [
       "/templates/process-docs/子单位工程质量验收记录.xlsx",
-      "/templates/process-docs/template-006.xlsx",
-      "/templates/process-docs/template-034.xlsx",
-      "/templates/process-docs/template-045.xlsx",
+      "/templates/process-docs/子方阵支架及组件安装分部工程质量验收记录（汇总用）.xlsx",
+      "/templates/process-docs/通用工程分部工程质量验收记录（汇总用）.xlsx",
+      "/templates/process-docs/主体结构工程分部工程质量验收记录（汇总用）.xlsx",
     ];
 
     for (const templatePath of summaryTemplates) {

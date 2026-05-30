@@ -1,8 +1,8 @@
 import PizZip from "pizzip";
 import type { ArchiveItem, ArchiveRecord } from "../types";
 import { resolveProcessFields } from "./fields";
-import { subunitProjectName } from "./textReplacement";
-import type { ProcessUserFields } from "./types";
+import { inspectionApplicationFullSubject, inspectionApplicationSubject, subunitProjectName } from "./textReplacement";
+import type { ProcessTemplate, ProcessUserFields } from "./types";
 import { archiveProjectCode, escapeRegExp, escapeXml } from "./utils";
 
 export function renderSummaryWorkbook(
@@ -10,6 +10,7 @@ export function renderSummaryWorkbook(
   record: ArchiveRecord,
   userFields: ProcessUserFields = {},
   item?: ArchiveItem,
+  processTemplate?: ProcessTemplate,
 ): Uint8Array {
   const zip = new PizZip(template);
   const sheet = zip.file("xl/worksheets/sheet1.xml");
@@ -21,8 +22,10 @@ export function renderSummaryWorkbook(
   let xml = sheet.asText();
   xml = setInlineStringCell(xml, "F4", archiveProjectCode(record.archiveCode));
   if (item) {
-    xml = fillSubunitQualityWorkbook(xml, record, item);
-    xml = preserveSubunitQualityPrintLayout(xml);
+    xml = processTemplate?.templateFile === "子单位工程质量验收记录.xlsx"
+      ? fillSubunitQualityWorkbook(xml, record, item)
+      : fillDivisionQualityWorkbook(xml, record, item);
+    xml = preserveSummaryQualityPrintLayout(xml);
   }
   xml = setInlineStringCell(xml, "G7", fields.generalContractorUnit);
   xml = setInlineStringCell(xml, "U7", fields.generalContractorProjectManager);
@@ -36,7 +39,7 @@ export function renderSummaryWorkbook(
 
   zip.file("xl/worksheets/sheet1.xml", xml);
   if (item) {
-    preserveSubunitQualityWorkbookPrintArea(zip);
+    preserveSummaryWorkbookPrintArea(zip);
   }
   return zip.generate({ type: "uint8array", compression: "DEFLATE" });
 }
@@ -65,7 +68,32 @@ function fillSubunitQualityWorkbook(xml: string, record: ArchiveRecord, item: Ar
   return nextXml;
 }
 
-function preserveSubunitQualityPrintLayout(xml: string): string {
+function fillDivisionQualityWorkbook(xml: string, record: ArchiveRecord, item: ArchiveItem): string {
+  const summary = divisionQualitySummary(record, item);
+  let nextXml = xml;
+  nextXml = setInlineStringCell(nextXml, "I2", summary.divisionName);
+  nextXml = setInlineStringCell(nextXml, "G6", summary.unitProjectName);
+  nextXml = setInlineStringCell(nextXml, "U6", summary.subdivisionCount);
+  nextXml = setInlineStringCell(nextXml, "AF6", String(summary.items.length));
+
+  for (let index = 0; index < 12; index += 1) {
+    const row = 11 + index;
+    const part = summary.items[index];
+    nextXml = setInlineStringCell(nextXml, `B${row}`, part ? String(index + 1) : "");
+    nextXml = setInlineStringCell(nextXml, `D${row}`, "");
+    nextXml = setInlineStringCell(nextXml, `J${row}`, part?.name ?? "");
+    nextXml = setInlineStringCell(nextXml, `S${row}`, part ? String(part.inspectionLotCount) : "");
+    nextXml = setInlineStringCell(nextXml, `V${row}`, part ? "自检检查符合规范及设计要求" : "");
+    nextXml = setInlineStringCell(nextXml, `AD${row}`, "");
+  }
+
+  nextXml = setInlineStringCell(nextXml, "V23", "齐全完整");
+  nextXml = setInlineStringCell(nextXml, "V24", "自检合格");
+  nextXml = setInlineStringCell(nextXml, "V25", "自检合格");
+  return nextXml;
+}
+
+function preserveSummaryQualityPrintLayout(xml: string): string {
   let nextXml = xml.replace(
     /<pageSetUpPr(?:\s[^>]*)?\/>/,
     '<pageSetUpPr fitToPage="1"/>',
@@ -78,29 +106,30 @@ function preserveSubunitQualityPrintLayout(xml: string): string {
   nextXml = upsertSelfClosingElement(
     nextXml,
     "pageMargins",
-    '<pageMargins left="0.7874015748031497" right="0" top="0.5905511811023622" bottom="0" header="0.51181" footer="0.51181"/>',
+    '<pageMargins left="0.786805555555556" right="0" top="0.590277777777778" bottom="0" header="0.511805555555556" footer="0.511805555555556"/>',
     "</worksheet>",
   );
-  nextXml = upsertSelfClosingElement(
-    nextXml,
-    "pageSetup",
-    '<pageSetup paperSize="9" scale="95" orientation="landscape" fitToWidth="1" fitToHeight="2" horizontalDpi="600" verticalDpi="600" copies="1"/>',
-    "</worksheet>",
-  );
+  nextXml = upsertPageSetup(nextXml);
   return nextXml;
 }
 
-function preserveSubunitQualityWorkbookPrintArea(zip: PizZip) {
+function preserveSummaryWorkbookPrintArea(zip: PizZip) {
   const workbook = zip.file("xl/workbook.xml");
   if (!workbook) {
     return;
   }
 
   const workbookXml = workbook.asText();
-  const printArea = '<definedName name="_xlnm.Print_Area" localSheetId="0">光伏方阵安装!$A$1:$AL$30</definedName>';
-  const nextWorkbookXml = workbookXml.includes("_xlnm.Print_Area")
-    ? workbookXml.replace(/<definedName name="_xlnm\.Print_Area"[^>]*>[\s\S]*?<\/definedName>/, printArea)
-    : workbookXml.replace(/<definedNames\/>|<definedNames><\/definedNames>/, `<definedNames>${printArea}</definedNames>`);
+  const sheetName = workbookXml.match(/<sheet[^>]*name="([^"]+)"/)?.[1] ?? "Sheet1";
+  const printArea = `<definedName name="_xlnm.Print_Area" localSheetId="0">${sheetName}!$A$1:$AL$30</definedName>`;
+  let nextWorkbookXml = workbookXml;
+  if (nextWorkbookXml.includes("_xlnm.Print_Area")) {
+    nextWorkbookXml = nextWorkbookXml.replace(/<definedName name="_xlnm\.Print_Area"[^>]*>[\s\S]*?<\/definedName>/, printArea);
+  } else if (/<definedNames\/>|<definedNames><\/definedNames>/.test(nextWorkbookXml)) {
+    nextWorkbookXml = nextWorkbookXml.replace(/<definedNames\/>|<definedNames><\/definedNames>/, `<definedNames>${printArea}</definedNames>`);
+  } else {
+    nextWorkbookXml = nextWorkbookXml.replace("</workbook>", `<definedNames>${printArea}</definedNames></workbook>`);
+  }
 
   zip.file("xl/workbook.xml", nextWorkbookXml);
 }
@@ -118,20 +147,183 @@ function upsertSelfClosingElement(xml: string, tagName: string, elementXml: stri
   return `${xml.slice(0, insertIndex)}${elementXml}${xml.slice(insertIndex)}`;
 }
 
+function upsertPageSetup(xml: string): string {
+  const existing = /<pageSetup\b([^>]*)\/>/;
+  if (existing.test(xml)) {
+    return xml.replace(existing, (_match, attrs: string) => {
+      const nextAttrs = upsertXmlAttribute(
+        upsertXmlAttribute(
+          upsertXmlAttribute(
+            upsertXmlAttribute(
+              upsertXmlAttribute(attrs, "paperSize", "9"),
+              "fitToWidth",
+              "1",
+            ),
+            "fitToHeight",
+            "1",
+          ),
+          "horizontalDpi",
+          "600",
+        ),
+        "verticalDpi",
+        "600",
+      );
+      return `<pageSetup${nextAttrs}/>`;
+    });
+  }
+
+  return upsertSelfClosingElement(
+    xml,
+    "pageSetup",
+    '<pageSetup paperSize="9" fitToWidth="1" fitToHeight="1" horizontalDpi="600" verticalDpi="600"/>',
+    "</worksheet>",
+  );
+}
+
+function upsertXmlAttribute(attrs: string, name: string, value: string): string {
+  const pattern = new RegExp(`\\s${name}="[^"]*"`);
+  if (pattern.test(attrs)) {
+    return attrs.replace(pattern, ` ${name}="${value}"`);
+  }
+  return `${attrs} ${name}="${value}"`;
+}
+
 function subunitQualitySummary(record: ArchiveRecord, item: ArchiveItem): {
   subunitProjectName: string;
   unitProjectName: string;
   parts: Array<{ name: string; count: number }>;
 } {
+  const followingItems = record.items.slice(record.items.indexOf(item) + 1);
+  const parts = followingItems
+    .slice(0, nextSubunitBoundaryIndex(followingItems))
+    .filter((candidate) => isDivisionQualityItem(candidate.title))
+    .map((candidate) => ({
+      name: divisionName(candidate.title),
+      count: countSubitemsInDivision(record, candidate),
+    }));
+
   return {
     subunitProjectName: subunitProjectName(item.title),
     unitProjectName: unitProjectName(record),
-    parts: [
-      { name: "子方阵支架及组件安装", count: 10 },
-      { name: "通用工程", count: 5 },
-      { name: "主体工程", count: 2 },
-    ],
+    parts,
   };
+}
+
+function divisionQualitySummary(record: ArchiveRecord, item: ArchiveItem): {
+  divisionName: string;
+  unitProjectName: string;
+  subdivisionCount: string;
+  items: Array<{ name: string; inspectionLotCount: number | "/" }>;
+} {
+  const divisionName = inspectionApplicationSubject(item.title);
+  const followingItems = record.items.slice(record.items.indexOf(item) + 1);
+  const children = followingItems
+    .slice(0, nextDivisionBoundaryIndex(followingItems))
+    .filter((candidate) => isDivisionSummaryChild(candidate.title));
+  const items = groupedDivisionSummaryChildren(record, children);
+
+  return {
+    divisionName,
+    unitProjectName: unitProjectName(record),
+    subdivisionCount: "/",
+    items,
+  };
+}
+
+function groupedDivisionSummaryChildren(
+  record: ArchiveRecord,
+  children: ArchiveItem[],
+): Array<{ name: string; inspectionLotCount: number | "/" }> {
+  const groups = new Map<string, { name: string; inspectionLotCount: number }>();
+  for (const child of children) {
+    const name = qualityItemName(child.title);
+    const current = groups.get(name) ?? { name, inspectionLotCount: 0 };
+    current.inspectionLotCount += countInspectionLots(record, child);
+    groups.set(name, current);
+  }
+
+  return Array.from(groups.values()).map((group) => ({
+    name: group.name,
+    inspectionLotCount: group.inspectionLotCount > 0 ? group.inspectionLotCount : "/",
+  }));
+}
+
+function nextDivisionBoundaryIndex(items: ArchiveItem[]): number {
+  const index = items.findIndex((item) =>
+    item.title.includes("开工报审") || isDivisionQualityItem(item.title),
+  );
+  return index === -1 ? items.length : index;
+}
+
+function isDivisionSummaryChild(title: string): boolean {
+  return /分项工程质量(?:报验申请|报审表)及验收记录/.test(title);
+}
+
+function qualityItemName(title: string): string {
+  return inspectionApplicationFullSubject(title)
+    .replace(/\s*分项工程\s*$/, "")
+    .trim();
+}
+
+function countInspectionLots(record: ArchiveRecord, item: ArchiveItem): number {
+  const followingItems = record.items.slice(record.items.indexOf(item) + 1);
+  const children = followingItems.slice(0, nextSubitemBoundaryIndex(followingItems));
+  return children.filter((candidate) => candidate.title.includes("检验批质量验收记录")).length;
+}
+
+function nextSubitemBoundaryIndex(items: ArchiveItem[]): number {
+  const index = items.findIndex((item) =>
+    item.title.includes("开工报审")
+    || isDivisionQualityItem(item.title)
+    || /分项工程质量(?:报验申请|报审表)及验收记录/.test(item.title),
+  );
+  return index === -1 ? items.length : index;
+}
+
+function nextSubunitBoundaryIndex(items: ArchiveItem[]): number {
+  const index = items.findIndex((item) =>
+    /子单位(?:工程)?/.test(item.title) && /质量(?:报验申请|报审表)及验收记录/.test(item.title),
+  );
+  return index === -1 ? items.length : index;
+}
+
+function isDivisionQualityItem(title: string): boolean {
+  return /分部工程质量(?:报验申请|报审表)及验收记录/.test(title) && !title.includes("子单位");
+}
+
+function divisionName(title: string): string {
+  return inspectionApplicationFullSubject(title)
+    .replace(/\s*分部工程\s*$/, "")
+    .trim();
+}
+
+function countSubitemsInDivision(record: ArchiveRecord, item: ArchiveItem): number {
+  const followingItems = record.items.slice(record.items.indexOf(item) + 1);
+  const children = followingItems
+    .slice(0, nextDivisionBoundaryIndex(followingItems))
+    .filter((candidate) => isDivisionSummaryChild(candidate.title));
+  const groups = new Set(children.map(subitemGroupKey));
+  return groups.size;
+}
+
+function subitemGroupKey(item: ArchiveItem): string {
+  return `${subitemParentCode(item.fileCode)}|${normalizedSubitemTitle(qualityItemName(item.title))}`;
+}
+
+function subitemParentCode(fileCode: string): string {
+  const code = fileCode.trim();
+  if (!code || code === "/") {
+    return "";
+  }
+
+  return code.replace(/-\d{3}$/, "");
+}
+
+function normalizedSubitemTitle(title: string): string {
+  return title
+    .replace(/^#\d+\s*/, "")
+    .replace(/开关柜G\d+柜/g, "开关柜")
+    .trim();
 }
 
 function unitProjectName(record: ArchiveRecord): string {

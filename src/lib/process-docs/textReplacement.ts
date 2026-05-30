@@ -53,6 +53,28 @@ export function subunitInspectionSubject(title: string): string {
   return subunitProjectName(title).replace(/\s*子单位工程\s*$/, "").trim();
 }
 
+export function inspectionApplicationFullSubject(title: string): string {
+  return stripProjectPrefix(title)
+    .replace(/\s*质量(?:报验申请|报审表)及验收记录\s*$/, "")
+    .replace(/[，,。；;：:\s]+$/g, "")
+    .trim();
+}
+
+export function inspectionApplicationSubject(title: string): string {
+  return inspectionApplicationFullSubject(title)
+    .replace(/\s*子单位工程\s*$/, "")
+    .replace(/\s*分部工程\s*$/, "")
+    .replace(/\s*分项工程\s*$/, "")
+    .trim();
+}
+
+export function stripProjectPrefix(title: string): string {
+  return title
+    .replace(/^\s*\d+[、.．\-\s]*/, "")
+    .replace(/^.*?项目\s*/, "")
+    .trim();
+}
+
 export function replaceStartReportScopeText(text: string, projectName: string, title: string): string {
   const scope = startReportScope(projectName, title);
   if (!scope) {
@@ -67,9 +89,7 @@ function replaceStartReportScope(text: string, projectName: string, title: strin
 }
 
 function startReportSuffix(title: string): string {
-  return title
-    .replace(/^\s*\d+[、.．\-\s]*/, "")
-    .replace(/^.*?项目\s*/, "")
+  return stripProjectPrefix(title)
     .replace(/\s*开工报审表?\s*$/, "")
     .replace(/[，,。；;：:\s]+$/g, "")
     .trim();

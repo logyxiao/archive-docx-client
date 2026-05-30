@@ -5,17 +5,11 @@ import { renderProcessDocx } from "./docxRenderer";
 import { processOutputName } from "./naming";
 import { renderSummaryWorkbook } from "./summaryWorkbookRenderer";
 import {
-  findSubunitInspectionApplicationTemplate,
-  findStartReportTemplate,
-  findSubunitQualityTemplate,
   getProcessRecordApplicability,
-  isStartReportItemTitle,
-  isSubunitInspectionApplicationTemplate,
-  isSubunitQualityItemTitle,
-  isSubunitQualityTemplate,
   isSummaryWorkbookTemplate,
   loadProcessManifest,
   loadProcessTemplate,
+  matchingTemplatesByTitle,
 } from "./templates";
 import type { GenerateProcessOptions, ProcessGenerationResult, ProcessTemplate, ProcessUserFields } from "./types";
 import { joinPath, sanitizeFileName } from "./utils";
@@ -27,9 +21,6 @@ export async function generateProcessDocs(
   writeFile: (path: string, bytes: Uint8Array) => Promise<void>,
 ): Promise<ProcessGenerationResult> {
   const manifest = await loadProcessManifest();
-  const startReportTemplate = findStartReportTemplate(manifest.templates);
-  const subunitQualityTemplate = findSubunitQualityTemplate(manifest.templates);
-  const subunitInspectionApplicationTemplate = findSubunitInspectionApplicationTemplate(manifest.templates);
   const selectedTemplateCategories = normalizeProcessTemplateCategories(options.selectedTemplateCategories);
   const selected = records.filter((record) => options.selectedCodes.includes(record.archiveCode));
   const files: ProcessGenerationResult["files"] = [];
@@ -49,12 +40,7 @@ export async function generateProcessDocs(
     );
 
     for (const item of record.items) {
-      const allTemplates = matchingTemplatesForItem(
-        item,
-        startReportTemplate,
-        subunitQualityTemplate,
-        subunitInspectionApplicationTemplate,
-      );
+      const allTemplates = matchingTemplatesByTitle(item, manifest.templates);
       if (allTemplates.length === 0) {
         continue;
       }
@@ -83,21 +69,6 @@ export async function generateProcessDocs(
   return { files, skipped, errors };
 }
 
-function matchingTemplatesForItem(
-  item: ArchiveItem,
-  startReportTemplate: ProcessTemplate | undefined,
-  subunitQualityTemplate: ProcessTemplate | undefined,
-  subunitInspectionApplicationTemplate: ProcessTemplate | undefined,
-): ProcessTemplate[] {
-  if (isStartReportItemTitle(item.title) && startReportTemplate) {
-    return [startReportTemplate];
-  }
-  if (isSubunitQualityItemTitle(item.title)) {
-    return [subunitInspectionApplicationTemplate, subunitQualityTemplate].filter((template): template is ProcessTemplate => Boolean(template));
-  }
-  return [];
-}
-
 async function renderProcessTemplate(
   template: ProcessTemplate,
   record: ArchiveRecord,
@@ -110,11 +81,6 @@ async function renderProcessTemplate(
   }
 
   return isSummaryWorkbookTemplate(template)
-    ? renderSummaryWorkbook(
-      bytes,
-      record,
-      userFields,
-      isSubunitQualityTemplate(template) || isSubunitInspectionApplicationTemplate(template) ? item : undefined,
-    )
+    ? renderSummaryWorkbook(bytes, record, userFields, item, template)
     : renderProcessWorkbook(bytes, record, item, userFields);
 }

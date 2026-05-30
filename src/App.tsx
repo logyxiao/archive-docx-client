@@ -27,6 +27,7 @@ import {
   generateProcessDocs,
   PROCESS_TEMPLATE_CATEGORIES,
   PROCESS_TEMPLATE_CATEGORY_IDS,
+  normalizeProcessTemplateCategories,
   type ProcessTemplateCategoryId,
 } from "./lib/processDocs";
 import { readBinaryFile, writeBinaryFile } from "./lib/tauriFiles";
@@ -104,8 +105,7 @@ function loadSavedProcessTemplateCategories(): ProcessTemplateCategoryId[] {
       return [...PROCESS_TEMPLATE_CATEGORY_IDS];
     }
 
-    const validIds = new Set<ProcessTemplateCategoryId>(PROCESS_TEMPLATE_CATEGORY_IDS);
-    return parsed.filter((value): value is ProcessTemplateCategoryId => validIds.has(value));
+    return [...normalizeProcessTemplateCategories(parsed)];
   } catch {
     return [...PROCESS_TEMPLATE_CATEGORY_IDS];
   }

@@ -1,18 +1,31 @@
 import type { ArchiveItem } from "../types";
-import { subunitProjectName } from "./textReplacement";
+import { stripProjectPrefix } from "./textReplacement";
 import type { ProcessTemplate } from "./types";
 import { sanitizeFileName } from "./utils";
 
 export function processOutputName(template: ProcessTemplate, item: ArchiveItem): string {
   const extension = template.outputExtension;
-  if (template.templateFile === "子单位工程报验申请单.docx") {
-    const fileCode = item.fileCode && item.fileCode !== "/" ? item.fileCode : "";
-    return sanitizeFileName(`${item.sequence || template.sequence}、${fileCode}${subunitProjectName(item.title)}报验申请单${extension}`);
+  const sequence = item.sequence || String(template.sequence);
+  const fileCode = item.fileCode && item.fileCode !== "/" ? item.fileCode : "";
+  const title = outputTitle(template, item.title);
+
+  return sanitizeFileName(`${sequence}、${fileCode}${title}${extension}`);
+}
+
+function outputTitle(template: ProcessTemplate, title: string): string {
+  const cleanTitle = title.replace(/^\s*\d+[、.．\-\s]*/, "").trim();
+  const acceptanceStem = cleanTitle
+    .replace(/\s*质量(?:报验申请|报审表)及验收记录\s*$/, "")
+    .replace(/[，,。；;：:\s]+$/g, "")
+    .trim();
+
+  if (template.kind === "docx" && template.originalName.includes("报验申请单")) {
+    return `${stripProjectPrefix(acceptanceStem)}报验申请单`;
   }
 
-  const originalStem = template.originalName.replace(/\.(docx|xls)$/i, "").replace(/^\d+、/, "");
-  const withFileCode = item.fileCode && item.fileCode !== "/"
-    ? originalStem.replace(/5028G01-[A-Z0-9-]+-\d{2,}/, item.fileCode)
-    : originalStem;
-  return sanitizeFileName(`${item.sequence || template.sequence}、${withFileCode}${extension}`);
+  if (template.kind === "xlsx" && template.originalName.includes("质量验收记录")) {
+    return `${acceptanceStem}${template.originalName.includes("汇总用") ? "质量验收记录（汇总用）" : "质量验收记录"}`;
+  }
+
+  return cleanTitle;
 }
