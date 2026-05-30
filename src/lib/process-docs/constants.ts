@@ -20,4 +20,12 @@ export const SOURCE_MISSING_LABELS = [
 
 export const PROCESS_RECORD_KEYWORDS = ["SG-ZHHC", "报验", "质量验收", "检验批", "施工记录", "测量记录", "检查记录"];
 
-export const PRESERVED_USER_FIELD_LABELS = ["总承包单位", "施工单位", "分包单位", "项目负责人", "项目技术负责人", "分包项目负责人"];
+export const PRESERVED_USER_FIELD_LABELS = [
+  "总承包单位",
+  "施工单位",
+  "分包单位",
+  "项目负责人",
+  "项目技术负责人",
+  "分包项目负责人",
+  "分包内容",
+];

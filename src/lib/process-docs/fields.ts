@@ -10,7 +10,7 @@ export function resolveProcessFields(userFields: ProcessUserFields, defaultUnit:
     constructionTechnicalLeader: firstNonBlank(userFields.constructionTechnicalLeader, userFields.projectTechnicalLeader),
     subcontractorUnit: firstNonBlank(userFields.subcontractorUnit),
     subcontractorProjectManager: firstNonBlank(userFields.subcontractorProjectManager),
-    subcontractorTechnicalLeader: firstNonBlank(userFields.subcontractorTechnicalLeader),
+    subcontractorContent: firstNonBlank(userFields.subcontractorContent),
     supervisionDepartment: firstNonBlank(userFields.supervisionDepartment),
   };
 }

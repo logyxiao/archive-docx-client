@@ -1,4 +1,5 @@
 import type { ArchiveItem, ArchiveRecord } from "../types";
+import { isProcessTemplateCategorySelected, normalizeProcessTemplateCategories } from "./categories";
 import { PROCESS_OUTPUT_DIR } from "./constants";
 import { renderProcessDocx } from "./docxRenderer";
 import { processOutputName } from "./naming";
@@ -15,6 +16,7 @@ export async function generateProcessDocs(
 ): Promise<ProcessGenerationResult> {
   const manifest = await loadProcessManifest();
   const templatesBySequence = groupTemplatesBySequence(manifest.templates);
+  const selectedTemplateCategories = normalizeProcessTemplateCategories(options.selectedTemplateCategories);
   const selected = records.filter((record) => options.selectedCodes.includes(record.archiveCode));
   const files: ProcessGenerationResult["files"] = [];
   const skipped: string[] = [];
@@ -34,9 +36,16 @@ export async function generateProcessDocs(
 
     for (const item of record.items) {
       const sequence = Number(item.sequence);
-      const templates = templatesBySequence.get(sequence) ?? [];
-      if (templates.length === 0) {
+      const allTemplates = templatesBySequence.get(sequence) ?? [];
+      if (allTemplates.length === 0) {
         skipped.push(`${record.archiveCode} 第 ${item.sequence || "?"} 条：未找到模板`);
+        continue;
+      }
+
+      const templates = allTemplates.filter((template) =>
+        isProcessTemplateCategorySelected(template, selectedTemplateCategories),
+      );
+      if (templates.length === 0) {
         continue;
       }
 

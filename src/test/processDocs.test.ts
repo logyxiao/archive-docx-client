@@ -49,7 +49,7 @@ describe("process docs generation", () => {
           constructionTechnicalLeader: "施工技术负责人",
           subcontractorUnit: "测试分包单位",
           subcontractorProjectManager: "分包负责人",
-          subcontractorTechnicalLeader: "分包技术负责人",
+          subcontractorContent: "支架安装",
           supervisionDepartment: "测试监理项目部",
         },
       },
@@ -66,6 +66,34 @@ describe("process docs generation", () => {
     ]);
     expect(result.errors).toEqual([]);
     expect(paths[0]).toContain("/过程资料/5028G01-0011-8312-001");
+  });
+
+    it("generates only selected process template categories", async () => {
+    stubProcessFetch();
+    const paths: string[] = [];
+
+    const result = await generateProcessDocs(
+      [processRecord],
+      {
+        selectedCodes: [processRecord.archiveCode],
+        outputDir: "/tmp/archive-output",
+        selectedTemplateCategories: ["start-report", "summary-quality-acceptance"],
+      },
+      async (path) => {
+        paths.push(path);
+      },
+    );
+
+    expect(result.files).toHaveLength(8);
+    expect(paths).toHaveLength(8);
+    expect(paths.some((path) => path.includes("开工报审"))).toBe(true);
+    expect(paths.some((path) => path.includes("质量验收记录（汇总用）"))).toBe(true);
+    expect(paths.some((path) => path.includes("报验申请"))).toBe(false);
+    expect(result.skipped).toEqual([
+      "5028G01-0011-8312-001 第 45 条：未找到模板",
+      "5028G01-0011-8312-001 第 46 条：未找到模板",
+    ]);
+    expect(result.errors).toEqual([]);
   });
 
     it("skips archive records that do not match the process-doc template profile", async () => {
@@ -123,6 +151,7 @@ describe("process docs generation", () => {
         constructionTechnicalLeader: "施工技术负责人",
         subcontractorUnit: "测试分包单位",
         subcontractorProjectManager: "分包负责人",
+        subcontractorContent: "支架安装",
       }),
     );
     const sheet = workbook.worksheets[0];
@@ -136,6 +165,7 @@ describe("process docs generation", () => {
     expect(sheet.getCell("T7").value).toBe("施工负责人");
     expect(sheet.getCell("AE7").value).toBe("施工技术负责人");
     expect(sheet.getCell("T8").value).toBe("分包负责人");
+    expect(sheet.getCell("AE8").value).toBe("支架安装");
     expect(sheet.getCell("B5").isMerged).toBe(true);
   });
 
@@ -229,6 +259,7 @@ describe("process docs generation", () => {
         constructionTechnicalLeader: "施工技术负责人",
         subcontractorUnit: "测试分包单位",
         subcontractorProjectManager: "分包负责人",
+        subcontractorContent: "光伏方阵安装",
       });
       const rendered = await workbookFrom(renderedBytes);
       const sourceZip = await JSZip.loadAsync(template);
@@ -243,6 +274,7 @@ describe("process docs generation", () => {
       expect(rendered.worksheets[0].getCell("G9").value).toBe("测试分包单位");
       expect(rendered.worksheets[0].getCell("U7").value).toBe("总包负责人");
       expect(rendered.worksheets[0].getCell("AF8").value).toBe("施工技术负责人");
+      expect(rendered.worksheets[0].getCell("AF9").value).toBe("光伏方阵安装");
     }
   });
   });

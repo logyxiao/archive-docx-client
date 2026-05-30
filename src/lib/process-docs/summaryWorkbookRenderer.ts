@@ -26,7 +26,7 @@ export function renderSummaryWorkbook(
   xml = setInlineStringCell(xml, "AF8", fields.constructionTechnicalLeader);
   xml = setInlineStringCell(xml, "G9", fields.subcontractorUnit);
   xml = setInlineStringCell(xml, "U9", fields.subcontractorProjectManager);
-  xml = setInlineStringCell(xml, "AF9", "");
+  xml = setInlineStringCell(xml, "AF9", fields.subcontractorContent);
 
   zip.file("xl/worksheets/sheet1.xml", xml);
   return zip.generate({ type: "uint8array", compression: "DEFLATE" });

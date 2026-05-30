@@ -16,19 +16,26 @@ import {
   RefreshCw,
   Search,
   Settings2,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import "./App.css";
 import { generateArchiveCatalog } from "./lib/catalog";
 import { generateArchiveDocs } from "./lib/docx";
 import { parseArchiveWorkbook } from "./lib/excel";
-import { generateProcessDocs } from "./lib/processDocs";
+import {
+  generateProcessDocs,
+  PROCESS_TEMPLATE_CATEGORIES,
+  PROCESS_TEMPLATE_CATEGORY_IDS,
+  type ProcessTemplateCategoryId,
+} from "./lib/processDocs";
 import { readBinaryFile, writeBinaryFile } from "./lib/tauriFiles";
 import type { ArchiveRecord } from "./lib/types";
 
 const DEFAULT_BACKUP_NOTE = "";
 const LAST_OUTPUT_DIR_KEY = "archive-docx-client:last-output-dir";
 const PROCESS_FIELDS_KEY = "archive-docx-client:process-fields";
+const PROCESS_TEMPLATE_CATEGORIES_KEY = "archive-docx-client:process-template-categories";
 const ARCHIVE_DOCX_TAB = "archive-docx";
 const PROCESS_DOCS_TAB = "process-docs";
 
@@ -41,7 +48,7 @@ interface SavedProcessFields {
   constructionTechnicalLeader: string;
   subcontractorUnit: string;
   subcontractorManager: string;
-  subcontractorTechnicalLeader: string;
+  subcontractorContent: string;
   supervisionDepartment: string;
 }
 
@@ -54,7 +61,7 @@ const EMPTY_PROCESS_FIELDS: SavedProcessFields = {
   constructionTechnicalLeader: "",
   subcontractorUnit: "",
   subcontractorManager: "",
-  subcontractorTechnicalLeader: "",
+  subcontractorContent: "",
   supervisionDepartment: "",
 };
 
@@ -65,21 +72,47 @@ function loadSavedProcessFields(): SavedProcessFields {
       return EMPTY_PROCESS_FIELDS;
     }
 
-    const parsed = JSON.parse(rawValue) as Partial<SavedProcessFields>;
+    const parsed = JSON.parse(rawValue) as Partial<SavedProcessFields> & { subcontractorTechnicalLeader?: string };
     return {
       ...EMPTY_PROCESS_FIELDS,
       ...Object.fromEntries(
         Object.entries(parsed).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
       ),
+      subcontractorContent:
+        typeof parsed.subcontractorContent === "string"
+          ? parsed.subcontractorContent
+          : typeof parsed.subcontractorTechnicalLeader === "string"
+            ? parsed.subcontractorTechnicalLeader
+            : "",
     };
   } catch {
     return EMPTY_PROCESS_FIELDS;
   }
 }
 
+function loadSavedProcessTemplateCategories(): ProcessTemplateCategoryId[] {
+  try {
+    const rawValue = localStorage.getItem(PROCESS_TEMPLATE_CATEGORIES_KEY);
+    if (!rawValue) {
+      return [...PROCESS_TEMPLATE_CATEGORY_IDS];
+    }
+
+    const parsed = JSON.parse(rawValue);
+    if (!Array.isArray(parsed)) {
+      return [...PROCESS_TEMPLATE_CATEGORY_IDS];
+    }
+
+    const validIds = new Set<ProcessTemplateCategoryId>(PROCESS_TEMPLATE_CATEGORY_IDS);
+    return parsed.filter((value): value is ProcessTemplateCategoryId => validIds.has(value));
+  } catch {
+    return [...PROCESS_TEMPLATE_CATEGORY_IDS];
+  }
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState(ARCHIVE_DOCX_TAB);
   const savedProcessFields = useMemo(loadSavedProcessFields, []);
+  const savedProcessTemplateCategories = useMemo(loadSavedProcessTemplateCategories, []);
   const [excelPath, setExcelPath] = useState("");
   const [outputDir, setOutputDir] = useState(() => localStorage.getItem(LAST_OUTPUT_DIR_KEY) ?? "");
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
@@ -99,8 +132,12 @@ function App() {
   const [processConstructionTechnicalLeader, setProcessConstructionTechnicalLeader] = useState(savedProcessFields.constructionTechnicalLeader);
   const [processSubcontractorUnit, setProcessSubcontractorUnit] = useState(savedProcessFields.subcontractorUnit);
   const [processSubcontractorManager, setProcessSubcontractorManager] = useState(savedProcessFields.subcontractorManager);
-  const [processSubcontractorTechnicalLeader, setProcessSubcontractorTechnicalLeader] = useState(savedProcessFields.subcontractorTechnicalLeader);
+  const [processSubcontractorContent, setProcessSubcontractorContent] = useState(savedProcessFields.subcontractorContent);
   const [processSupervisionDepartment, setProcessSupervisionDepartment] = useState(savedProcessFields.supervisionDepartment);
+  const [selectedProcessTemplateCategories, setSelectedProcessTemplateCategories] = useState<ProcessTemplateCategoryId[]>(
+    savedProcessTemplateCategories,
+  );
+  const [isProcessInfoModalOpen, setIsProcessInfoModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingProcess, setIsGeneratingProcess] = useState(false);
@@ -122,6 +159,8 @@ function App() {
 
   const shouldGenerateDocx = generateCover || generateNote || generateSpine;
   const canGenerate = selectedCodes.length > 0 && outputDir && (shouldGenerateDocx || generateCatalogWorkbook);
+  const canGenerateProcess =
+    selectedCodes.length > 0 && Boolean(outputDir) && selectedProcessTemplateCategories.length > 0 && !isGeneratingProcess;
   const previewIndex = previewRecord
     ? filteredRecords.findIndex((record) => record.archiveCode === previewRecord.archiveCode)
     : -1;
@@ -136,7 +175,7 @@ function App() {
       constructionTechnicalLeader: processConstructionTechnicalLeader,
       subcontractorUnit: processSubcontractorUnit,
       subcontractorManager: processSubcontractorManager,
-      subcontractorTechnicalLeader: processSubcontractorTechnicalLeader,
+      subcontractorContent: processSubcontractorContent,
       supervisionDepartment: processSupervisionDepartment,
     };
     localStorage.setItem(PROCESS_FIELDS_KEY, JSON.stringify(fields));
@@ -149,9 +188,13 @@ function App() {
     processConstructionTechnicalLeader,
     processSubcontractorUnit,
     processSubcontractorManager,
-    processSubcontractorTechnicalLeader,
+    processSubcontractorContent,
     processSupervisionDepartment,
   ]);
+
+  useEffect(() => {
+    localStorage.setItem(PROCESS_TEMPLATE_CATEGORIES_KEY, JSON.stringify(selectedProcessTemplateCategories));
+  }, [selectedProcessTemplateCategories]);
 
   async function chooseExcel() {
     const selected = await open({
@@ -262,6 +305,12 @@ function App() {
     }
   }
 
+  function toggleProcessTemplateCategory(categoryId: ProcessTemplateCategoryId) {
+    setSelectedProcessTemplateCategories((current) =>
+      current.includes(categoryId) ? current.filter((id) => id !== categoryId) : [...current, categoryId],
+    );
+  }
+
   async function generate() {
     if (!canGenerate) {
       return;
@@ -321,7 +370,7 @@ function App() {
   }
 
   async function generateProcess() {
-    if (selectedCodes.length === 0 || !outputDir) {
+    if (!canGenerateProcess) {
       return;
     }
 
@@ -333,6 +382,7 @@ function App() {
         {
           selectedCodes,
           outputDir,
+          selectedTemplateCategories: selectedProcessTemplateCategories,
           userFields: {
             generalContractorUnit: processGeneralContractorUnit.trim(),
             generalContractorProjectManager: processGeneralContractorManager.trim(),
@@ -342,7 +392,7 @@ function App() {
             constructionTechnicalLeader: processConstructionTechnicalLeader.trim(),
             subcontractorUnit: processSubcontractorUnit.trim(),
             subcontractorProjectManager: processSubcontractorManager.trim(),
-            subcontractorTechnicalLeader: processSubcontractorTechnicalLeader.trim(),
+            subcontractorContent: processSubcontractorContent.trim(),
             supervisionDepartment: processSupervisionDepartment.trim(),
           },
         },
@@ -423,24 +473,6 @@ function App() {
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Archive Workspace</p>
-          <h1>档案工具箱</h1>
-        </div>
-        <div className="topbar-actions">
-          <button className="secondary-button update-button" onClick={checkForUpdates} disabled={isCheckingUpdate}>
-            {isCheckingUpdate ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-            检查更新
-          </button>
-          <div className="summary-strip">
-            <SummaryItem label="案卷" value={records.length} />
-            <SummaryItem label="已选" value={selectedCodes.length} />
-            <SummaryItem label="待生成" value={estimateFileCount(selectedCodes.length, generateCover, generateNote, generateSpine, generateCatalogWorkbook)} />
-          </div>
-        </div>
-      </header>
-
       <nav className="app-tabs" aria-label="功能栏目">
         <button
           className={`tab-button ${activeTab === ARCHIVE_DOCX_TAB ? "active" : ""}`}
@@ -457,6 +489,10 @@ function App() {
         >
           <FolderTree size={17} />
           过程资料生成
+        </button>
+        <button className="secondary-button update-button tab-update-button" onClick={checkForUpdates} disabled={isCheckingUpdate} title="检查更新">
+          {isCheckingUpdate ? <Loader2 className="spin" size={15} /> : <RefreshCw size={15} />}
+          更新
         </button>
       </nav>
 
@@ -516,80 +552,39 @@ function App() {
                   <FolderTree size={19} />
                   <h2>过程资料生成</h2>
                 </div>
-                <div className="process-field-grid">
-                  <label className="text-field">
-                    <span>总承包单位</span>
-                    <input
-                      value={processGeneralContractorUnit}
-                      onChange={(event) => setProcessGeneralContractorUnit(event.currentTarget.value)}
-                    />
-                  </label>
-                  <label className="text-field">
-                    <span>总承包单位项目负责人</span>
-                    <input
-                      value={processGeneralContractorManager}
-                      onChange={(event) => setProcessGeneralContractorManager(event.currentTarget.value)}
-                    />
-                  </label>
-                  <label className="text-field">
-                    <span>总承包单位项目技术负责人</span>
-                    <input
-                      value={processGeneralContractorTechnicalLeader}
-                      onChange={(event) => setProcessGeneralContractorTechnicalLeader(event.currentTarget.value)}
-                    />
-                  </label>
-                  <label className="text-field">
-                    <span>施工单位</span>
-                    <input
-                      value={processConstructionUnit}
-                      onChange={(event) => setProcessConstructionUnit(event.currentTarget.value)}
-                    />
-                  </label>
-                  <label className="text-field">
-                    <span>施工单位项目负责人</span>
-                    <input
-                      value={processConstructionManager}
-                      onChange={(event) => setProcessConstructionManager(event.currentTarget.value)}
-                    />
-                  </label>
-                  <label className="text-field">
-                    <span>施工单位项目技术负责人</span>
-                    <input
-                      value={processConstructionTechnicalLeader}
-                      onChange={(event) => setProcessConstructionTechnicalLeader(event.currentTarget.value)}
-                    />
-                  </label>
-                  <label className="text-field">
-                    <span>分包单位</span>
-                    <input
-                      value={processSubcontractorUnit}
-                      onChange={(event) => setProcessSubcontractorUnit(event.currentTarget.value)}
-                    />
-                  </label>
-                  <label className="text-field">
-                    <span>分包单位项目负责人</span>
-                    <input
-                      value={processSubcontractorManager}
-                      onChange={(event) => setProcessSubcontractorManager(event.currentTarget.value)}
-                    />
-                  </label>
-                  <label className="text-field">
-                    <span>分包单位项目技术负责人</span>
-                    <input
-                      value={processSubcontractorTechnicalLeader}
-                      onChange={(event) => setProcessSubcontractorTechnicalLeader(event.currentTarget.value)}
-                    />
-                  </label>
-                  <label className="text-field">
-                    <span>监理项目部</span>
-                    <input
-                      value={processSupervisionDepartment}
-                      onChange={(event) => setProcessSupervisionDepartment(event.currentTarget.value)}
-                    />
-                  </label>
+                <div className="process-info-actions">
+                  <button className="secondary-button process-info-button" type="button" onClick={() => setIsProcessInfoModalOpen(true)}>
+                    <SlidersHorizontal size={17} />
+                    填写生成信息
+                  </button>
+                </div>
+                <div className="process-template-section">
+                  <div className="template-section-heading">
+                    <span>生成模板</span>
+                    <div className="mini-actions">
+                      <button type="button" onClick={() => setSelectedProcessTemplateCategories([...PROCESS_TEMPLATE_CATEGORY_IDS])}>
+                        全选
+                      </button>
+                      <button type="button" onClick={() => setSelectedProcessTemplateCategories([])}>
+                        清空
+                      </button>
+                    </div>
+                  </div>
+                  <div className="process-template-grid">
+                    {PROCESS_TEMPLATE_CATEGORIES.map((category) => (
+                      <label key={category.id} className="template-check">
+                        <input
+                          type="checkbox"
+                          checked={selectedProcessTemplateCategories.includes(category.id)}
+                          onChange={() => toggleProcessTemplateCategory(category.id)}
+                        />
+                        <span>{category.label}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <div className="generation-actions">
-                  <button className="generate-button" onClick={generateProcess} disabled={selectedCodes.length === 0 || !outputDir || isGeneratingProcess}>
+                  <button className="generate-button" onClick={generateProcess} disabled={!canGenerateProcess}>
                     {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
                     生成过程资料
                   </button>
@@ -602,6 +597,105 @@ function App() {
             </section>
           </section>
         </section>
+      ) : null}
+
+      {isProcessInfoModalOpen ? (
+        <div className="modal-backdrop" onClick={() => setIsProcessInfoModalOpen(false)}>
+          <section
+            className="process-info-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="process-info-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-heading">
+              <div className="section-heading">
+                <SlidersHorizontal size={19} />
+                <h2 id="process-info-title">过程资料生成信息</h2>
+              </div>
+              <button className="icon-button" onClick={() => setIsProcessInfoModalOpen(false)} title="关闭" aria-label="关闭生成信息">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="process-field-grid modal-process-field-grid">
+              <label className="text-field">
+                <span>总承包单位</span>
+                <input
+                  value={processGeneralContractorUnit}
+                  onChange={(event) => setProcessGeneralContractorUnit(event.currentTarget.value)}
+                />
+              </label>
+              <label className="text-field">
+                <span>总承包单位项目负责人</span>
+                <input
+                  value={processGeneralContractorManager}
+                  onChange={(event) => setProcessGeneralContractorManager(event.currentTarget.value)}
+                />
+              </label>
+              <label className="text-field">
+                <span>总承包单位项目技术负责人</span>
+                <input
+                  value={processGeneralContractorTechnicalLeader}
+                  onChange={(event) => setProcessGeneralContractorTechnicalLeader(event.currentTarget.value)}
+                />
+              </label>
+              <label className="text-field">
+                <span>施工单位</span>
+                <input
+                  value={processConstructionUnit}
+                  onChange={(event) => setProcessConstructionUnit(event.currentTarget.value)}
+                />
+              </label>
+              <label className="text-field">
+                <span>施工单位项目负责人</span>
+                <input
+                  value={processConstructionManager}
+                  onChange={(event) => setProcessConstructionManager(event.currentTarget.value)}
+                />
+              </label>
+              <label className="text-field">
+                <span>施工单位项目技术负责人</span>
+                <input
+                  value={processConstructionTechnicalLeader}
+                  onChange={(event) => setProcessConstructionTechnicalLeader(event.currentTarget.value)}
+                />
+              </label>
+              <label className="text-field">
+                <span>分包单位</span>
+                <input
+                  value={processSubcontractorUnit}
+                  onChange={(event) => setProcessSubcontractorUnit(event.currentTarget.value)}
+                />
+              </label>
+              <label className="text-field">
+                <span>分包单位项目负责人</span>
+                <input
+                  value={processSubcontractorManager}
+                  onChange={(event) => setProcessSubcontractorManager(event.currentTarget.value)}
+                />
+              </label>
+              <label className="text-field">
+                <span>分包内容</span>
+                <input
+                  value={processSubcontractorContent}
+                  onChange={(event) => setProcessSubcontractorContent(event.currentTarget.value)}
+                />
+              </label>
+              <label className="text-field">
+                <span>监理项目部</span>
+                <input
+                  value={processSupervisionDepartment}
+                  onChange={(event) => setProcessSupervisionDepartment(event.currentTarget.value)}
+                />
+              </label>
+            </div>
+            <div className="modal-footer">
+              <button className="primary-button" type="button" onClick={() => setIsProcessInfoModalOpen(false)}>
+                完成
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
 
       {previewRecord ? (
@@ -684,15 +778,6 @@ async function showOperationError(error: unknown) {
   });
 }
 
-function SummaryItem({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="summary-item">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
 function PathLine({ label, value }: { label: string; value: string }) {
   return (
     <div className="path-line">
@@ -738,10 +823,6 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (che
       <span>{label}</span>
     </label>
   );
-}
-
-function estimateFileCount(count: number, cover: boolean, note: boolean, spine: boolean, catalog: boolean): number {
-  return count * Number(cover) + count * Number(note) + (spine ? Math.ceil(count / 7) : 0) + Number(catalog && count > 0);
 }
 
 export default App;

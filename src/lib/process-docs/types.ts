@@ -1,4 +1,5 @@
 import type { GeneratedFile } from "../types";
+import type { ProcessTemplateCategoryId } from "./categories";
 
 export interface ProcessTemplateManifest {
   templates: ProcessTemplate[];
@@ -16,6 +17,7 @@ export interface GenerateProcessOptions {
   selectedCodes: string[];
   outputDir: string;
   userFields?: ProcessUserFields;
+  selectedTemplateCategories?: ProcessTemplateCategoryId[];
 }
 
 export interface ProcessGenerationResult {
@@ -35,7 +37,7 @@ export interface ProcessUserFields {
   constructionTechnicalLeader?: string;
   subcontractorUnit?: string;
   subcontractorProjectManager?: string;
-  subcontractorTechnicalLeader?: string;
+  subcontractorContent?: string;
   supervisionDepartment?: string;
 }
 
@@ -48,6 +50,6 @@ export interface ResolvedProcessFields {
   constructionTechnicalLeader: string;
   subcontractorUnit: string;
   subcontractorProjectManager: string;
-  subcontractorTechnicalLeader: string;
+  subcontractorContent: string;
   supervisionDepartment: string;
 }

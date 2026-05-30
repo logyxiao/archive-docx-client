@@ -66,7 +66,7 @@ function fillUnitScopedFields(sheet: ExcelJS.Worksheet, fields: ResolvedProcessF
     if (rowHasExactLabel(row, "分包单位")) {
       fillOrClearAfterLabelInRow(row, ["分包单位"], fields.subcontractorUnit);
       fillOrClearAfterLabelInRow(row, ["分包项目负责人", "项目负责人"], fields.subcontractorProjectManager);
-      fillOrClearAfterLabelInRow(row, ["分包项目技术负责人", "项目技术负责人"], fields.subcontractorTechnicalLeader);
+      fillOrClearAfterLabelInRow(row, ["分包内容"], fields.subcontractorContent);
     }
   }
 }
