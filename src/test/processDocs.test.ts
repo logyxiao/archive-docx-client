@@ -176,18 +176,18 @@ describe("process docs generation", () => {
       expect(sheet.getCell("AD11").value).toBeNull();
       expect(sheet.pageSetup.fitToPage).toBe(true);
       expect(sheet.pageSetup.fitToWidth).toBe(1);
-      expect(sheet.pageSetup.fitToHeight).toBe(2);
-      expect(sheet.pageSetup.orientation).toBe("landscape");
+      expect(sheet.pageSetup.fitToHeight).toBe(1);
+      expect(sheet.pageSetup.orientation).toBe("portrait");
       expect(sheet.pageSetup.paperSize).toBe(9);
-      expect(sheet.pageSetup.scale).toBe(95);
+      expect(sheet.pageSetup.scale).toBe(99);
       expect(sheet.pageSetup.margins).toMatchObject({
-        left: 0.7874015748031497,
+        left: 0.786805555555556,
         right: 0,
-        top: 0.5905511811023622,
+        top: 0.590277777777778,
         bottom: 0,
       });
       expect(sheetXml.indexOf("<pageMargins")).toBeLessThan(sheetXml.indexOf("<pageSetup"));
-      expect(workbookXml).toContain('<definedName name="_xlnm.Print_Area" localSheetId="0">光伏方阵安装!$A$1:$AL$30</definedName>');
+      expect(workbookXml).toContain('<definedName name="_xlnm.Print_Area" localSheetId="0">地基与基础!$A$1:$AL$30</definedName>');
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
     });
