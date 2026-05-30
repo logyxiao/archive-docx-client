@@ -21,15 +21,15 @@ jobs:
         include:
           - name: Windows
             platform: windows-latest
-            args: ""
+            args: "--bundles nsis"
             rust-targets: ""
           - name: macOS Apple Silicon
             platform: macos-latest
-            args: "--target aarch64-apple-darwin"
+            args: "--target aarch64-apple-darwin --bundles dmg"
             rust-targets: "aarch64-apple-darwin"
           - name: macOS Intel
             platform: macos-latest
-            args: "--target x86_64-apple-darwin"
+            args: "--target x86_64-apple-darwin --bundles dmg"
             rust-targets: "x86_64-apple-darwin"
 
     steps:
@@ -56,9 +56,13 @@ jobs:
         run: npm test
 
       - name: Build Tauri bundles
-        uses: tauri-apps/tauri-action@v0
+        run: npm run tauri -- build ${{ matrix.args }}
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
         with:
-          tauriScript: npm run tauri
-          args: ${{ matrix.args }}
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: "[platform]-[arch]-[bundle]"
+          name: ${{ matrix.name }} bundles
+          path: |
+            src-tauri/target/**/bundle/nsis/*.exe
+            src-tauri/target/**/bundle/dmg/*.dmg
+          if-no-files-found: error
