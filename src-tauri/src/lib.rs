@@ -5,6 +5,10 @@ fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
 
 #[tauri::command]
 fn write_binary_file(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+
     std::fs::write(path, bytes).map_err(|error| error.to_string())
 }
 
@@ -14,7 +18,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![read_binary_file, write_binary_file])
+        .invoke_handler(tauri::generate_handler![
+            read_binary_file,
+            write_binary_file
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

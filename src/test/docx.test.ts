@@ -1,11 +1,23 @@
 import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
-import { coverData, coverFileName, noteData, noteFileName, renderDocx, spineData, spineFileName } from "../lib/docx";
+import {
+  coverData,
+  coverFileName,
+  formatSpineDocx,
+  generateArchiveDocs,
+  noteData,
+  noteFileName,
+  renderDocx,
+  spineColumnWidthTwips,
+  spineData,
+  spineFileName,
+} from "../lib/docx";
 import { parseArchiveWorkbook } from "../lib/excel";
 
 const records = parseArchiveWorkbook(readFileSync("../预立卷档案总目录（高明）(5).xlsx"));
 const record = records.find((item) => item.archiveCode === "5028G01-0011-842-001")!;
+const largeRecord = records.find((item) => item.archiveCode === "5028G01-0011-941-001")!;
 
 async function docxText(bytes: Uint8Array): Promise<string> {
   const zip = await JSZip.loadAsync(bytes);
@@ -18,7 +30,8 @@ describe("renderDocx", () => {
     const bytes = renderDocx(template, coverData(record));
     const xml = await docxText(bytes);
 
-    expect(xml).toContain("5028G01-0011-842-001");
+    expect(xml).toContain("5028G01");
+    expect(xml).toContain("-0011");
     expect(xml).toContain("中核汇能高明创楷3.58904MWp分布式光伏项目");
     expect(xml).not.toContain("{{");
   });
@@ -45,6 +58,34 @@ describe("renderDocx", () => {
     );
   });
 
+  it("groups cover and note for the same archive code in one folder", async () => {
+    globalThis.fetch = async (input) => {
+      const path = `public${String(input)}`;
+      return new Response(readFileSync(path));
+    };
+    const paths: string[] = [];
+
+    await generateArchiveDocs(
+      [record],
+      {
+        selectedCodes: [record.archiveCode],
+        backupNote: "",
+        outputDir: "/tmp/archive-output",
+        generateCover: true,
+        generateNote: true,
+        generateSpine: false,
+      },
+      async (path) => {
+        paths.push(path);
+      },
+    );
+
+    expect(paths).toEqual([
+      `/tmp/archive-output/案卷大封面和备考表/${record.archiveCode}${record.fullTitle}/${coverFileName(record)}`,
+      `/tmp/archive-output/案卷大封面和备考表/${record.archiveCode}${record.fullTitle}/${noteFileName(record)}`,
+    ]);
+  });
+
   it("names spine files with archive code and title for a single record", () => {
     expect(spineFileName([record])).toBe(
       "5028G01-0011-842-001中核汇能高明创楷3.58904MWp分布式光伏项目 二次设备试验案卷脊背.docx",
@@ -56,8 +97,23 @@ describe("renderDocx", () => {
     const bytes = renderDocx(template, spineData([record]));
     const xml = await docxText(bytes);
 
-    expect(xml).toContain("5028G01-0011-842-001");
+    expect(xml).toContain("5028G01");
+    expect(xml).toContain("-0011");
+    expect(xml).toContain("-842");
+    expect(xml).toContain("-001");
     expect(xml).toContain("二次设备试验");
     expect(xml).not.toContain("{{");
+  });
+
+  it("formats spine width by page count", async () => {
+    const template = readFileSync("public/templates/spine.docx");
+    const bytes = formatSpineDocx(renderDocx(template, spineData([largeRecord, record])), [largeRecord, record]);
+    const xml = await docxText(bytes);
+
+    expect(spineColumnWidthTwips(largeRecord)).toBe(2268);
+    expect(spineColumnWidthTwips(record)).toBe(1134);
+    expect(xml).toContain('<w:gridCol w:w="2268"/>');
+    expect(xml).toContain('<w:gridCol w:w="1134"/>');
+    expect(xml).toContain('<w:textDirection w:val="tbLrV"/>');
   });
 });

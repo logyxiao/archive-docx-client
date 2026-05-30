@@ -1,28 +1,34 @@
 import { useMemo, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { message as showDialogMessage, open } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 import {
   Check,
+  ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
   FileText,
   FolderOpen,
+  Info,
   Loader2,
   Search,
   Settings2,
+  X,
 } from "lucide-react";
 import "./App.css";
 import { generateArchiveDocs } from "./lib/docx";
 import { parseArchiveWorkbook } from "./lib/excel";
 import { readBinaryFile, writeBinaryFile } from "./lib/tauriFiles";
-import type { ArchiveRecord, GenerationResult } from "./lib/types";
+import type { ArchiveRecord } from "./lib/types";
 
 const DEFAULT_BACKUP_NOTE = "";
+const LAST_OUTPUT_DIR_KEY = "archive-docx-client:last-output-dir";
 
 function App() {
   const [excelPath, setExcelPath] = useState("");
-  const [outputDir, setOutputDir] = useState("");
+  const [outputDir, setOutputDir] = useState(() => localStorage.getItem(LAST_OUTPUT_DIR_KEY) ?? "");
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
+  const [previewRecord, setPreviewRecord] = useState<ArchiveRecord | null>(null);
   const [query, setQuery] = useState("");
   const [backupNote, setBackupNote] = useState(DEFAULT_BACKUP_NOTE);
   const [generateCover, setGenerateCover] = useState(true);
@@ -30,8 +36,6 @@ function App() {
   const [generateSpine, setGenerateSpine] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [message, setMessage] = useState("");
-  const [result, setResult] = useState<GenerationResult | null>(null);
 
   const filteredRecords = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -47,13 +51,10 @@ function App() {
     );
   }, [query, records]);
 
-  const selectedRecords = useMemo(
-    () => records.filter((record) => selectedCodes.includes(record.archiveCode)),
-    [records, selectedCodes],
-  );
-
-  const activePreview = selectedRecords[0] ?? records[0] ?? null;
   const canGenerate = selectedCodes.length > 0 && outputDir && (generateCover || generateNote || generateSpine);
+  const previewIndex = previewRecord
+    ? filteredRecords.findIndex((record) => record.archiveCode === previewRecord.archiveCode)
+    : -1;
 
   async function chooseExcel() {
     const selected = await open({
@@ -66,8 +67,6 @@ function App() {
     }
 
     setIsLoading(true);
-    setMessage("");
-    setResult(null);
 
     try {
       const bytes = await readBinaryFile(selected);
@@ -75,9 +74,8 @@ function App() {
       setExcelPath(selected);
       setRecords(parsed);
       setSelectedCodes([]);
-      setMessage(`已读取 ${parsed.length} 个案卷`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      await showOperationError(error);
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +85,19 @@ function App() {
     const selected = await open({ directory: true, multiple: false });
     if (typeof selected === "string") {
       setOutputDir(selected);
-      setResult(null);
+      localStorage.setItem(LAST_OUTPUT_DIR_KEY, selected);
+    }
+  }
+
+  async function openOutputDir() {
+    if (!outputDir) {
+      return;
+    }
+
+    try {
+      await openPath(outputDir);
+    } catch (error) {
+      await showOperationError(error);
     }
   }
 
@@ -108,14 +118,23 @@ function App() {
     });
   }
 
+  function switchPreview(offset: number) {
+    if (previewIndex < 0) {
+      return;
+    }
+
+    const nextRecord = filteredRecords[previewIndex + offset];
+    if (nextRecord) {
+      setPreviewRecord(nextRecord);
+    }
+  }
+
   async function generate() {
     if (!canGenerate) {
       return;
     }
 
     setIsGenerating(true);
-    setResult(null);
-    setMessage("");
 
     try {
       const generated = await generateArchiveDocs(
@@ -130,10 +149,19 @@ function App() {
         },
         writeBinaryFile,
       );
-      setResult(generated);
-      setMessage(`生成完成：${generated.files.length} 个文件`);
+      if (generated.errors.length > 0) {
+        await showDialogMessage(
+          `生成完成：${generated.files.length} 个文件，${generated.errors.length} 个失败。\n\n${generated.errors.join("\n")}`,
+          { title: "生成完成", kind: "warning" },
+        );
+      } else {
+        await showDialogMessage(`生成成功，共生成 ${generated.files.length} 个文件。`, {
+          title: "生成成功",
+          kind: "info",
+        });
+      }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      await showOperationError(error);
     } finally {
       setIsGenerating(false);
     }
@@ -190,45 +218,27 @@ function App() {
           </label>
           <div className="record-list">
             {filteredRecords.map((record) => (
-              <button
+              <div
                 key={record.archiveCode}
                 className={`record-row ${selectedCodes.includes(record.archiveCode) ? "selected" : ""}`}
-                onClick={() => toggleCode(record.archiveCode)}
               >
-                <span className="checkmark">{selectedCodes.includes(record.archiveCode) ? <Check size={14} /> : null}</span>
-                <span>
-                  <strong>{record.archiveCode}</strong>
-                  <small>{record.fullTitle}</small>
-                </span>
-                <ChevronRight size={16} />
-              </button>
+                <button className="record-toggle" onClick={() => toggleCode(record.archiveCode)}>
+                  <span className="checkmark">{selectedCodes.includes(record.archiveCode) ? <Check size={14} /> : null}</span>
+                  <span>
+                    <strong>{record.archiveCode}</strong>
+                    <small>{record.fullTitle}</small>
+                  </span>
+                </button>
+                <button className="icon-button" onClick={() => setPreviewRecord(record)} title="案卷详情" aria-label={`${record.archiveCode} 案卷详情`}>
+                  <Info size={17} />
+                </button>
+              </div>
             ))}
             {records.length === 0 ? <div className="empty-state">请选择 Excel 总目录</div> : null}
           </div>
         </aside>
 
         <section className="detail-pane">
-          <div className="tool-section">
-            <div className="section-heading">
-              <FileText size={19} />
-              <h2>字段预览</h2>
-            </div>
-            {activePreview ? (
-              <div className="preview-grid">
-                <PreviewItem label="档号" value={activePreview.archiveCode} />
-                <PreviewItem label="项目名称" value={activePreview.projectName} />
-                <PreviewItem label="案卷标题" value={activePreview.volumeTitle} />
-                <PreviewItem label="立卷单位" value={activePreview.filingUnit} />
-                <PreviewItem label="起止日期" value={activePreview.dateRange} />
-                <PreviewItem label="保管期限" value={activePreview.retentionPeriod} />
-                <PreviewItem label="文字材料" value={`${activePreview.textPages} 页`} />
-                <PreviewItem label="图样" value={`${activePreview.drawingPages} 页`} />
-              </div>
-            ) : (
-              <div className="empty-state detail-empty">读取 Excel 后会显示推导字段</div>
-            )}
-          </div>
-
           <div className="tool-section">
             <div className="section-heading">
               <Settings2 size={19} />
@@ -247,34 +257,98 @@ function App() {
                 placeholder="不填写则生成空白说明"
               />
             </label>
-            <button className="generate-button" onClick={generate} disabled={!canGenerate || isGenerating}>
-              {isGenerating ? <Loader2 className="spin" size={18} /> : <FileText size={18} />}
-              生成 DOCX
-            </button>
-          </div>
-
-          <div className="status-panel">
-            <strong>{message || "准备就绪"}</strong>
-            {result?.errors.length ? (
-              <ul className="error-list">
-                {result.errors.map((error) => (
-                  <li key={error}>{error}</li>
-                ))}
-              </ul>
-            ) : null}
-            {result?.files.length ? (
-              <div className="file-list">
-                {result.files.slice(0, 8).map((file) => (
-                  <span key={file.path}>{file.name}</span>
-                ))}
-                {result.files.length > 8 ? <span>另有 {result.files.length - 8} 个文件</span> : null}
-              </div>
-            ) : null}
+            <div className="generation-actions">
+              <button className="generate-button" onClick={generate} disabled={!canGenerate || isGenerating}>
+                {isGenerating ? <Loader2 className="spin" size={18} /> : <FileText size={18} />}
+                生成 DOCX
+              </button>
+              <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
+                <FolderOpen size={18} />
+                打开输出目录
+              </button>
+            </div>
           </div>
         </section>
       </section>
+
+      {previewRecord ? (
+        <div className="modal-backdrop" onClick={() => setPreviewRecord(null)}>
+          <section className="preview-modal" role="dialog" aria-modal="true" aria-labelledby="preview-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-heading">
+              <div className="section-heading">
+                <FileText size={19} />
+                <h2 id="preview-title">案卷字段预览</h2>
+              </div>
+              <div className="modal-actions">
+                <button className="secondary-button modal-nav-button" onClick={() => switchPreview(-1)} disabled={previewIndex <= 0}>
+                  <ChevronLeft size={17} />
+                  上一个
+                </button>
+                <span className="modal-count">
+                  {previewIndex >= 0 ? previewIndex + 1 : 1} / {filteredRecords.length || 1}
+                </span>
+                <button
+                  className="secondary-button modal-nav-button"
+                  onClick={() => switchPreview(1)}
+                  disabled={previewIndex < 0 || previewIndex >= filteredRecords.length - 1}
+                >
+                  下一个
+                  <ChevronRight size={17} />
+                </button>
+                <button className="icon-button" onClick={() => setPreviewRecord(null)} title="关闭" aria-label="关闭字段预览">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="preview-grid modal-preview-grid">
+              {getRecordPreviewFields(previewRecord).map((field) => (
+                <PreviewItem key={field.label} label={field.label} value={field.value} />
+              ))}
+            </div>
+            <div className="detail-table-wrap">
+              <div className="detail-table-title">
+                <h3>卷内明细</h3>
+                <span>{previewRecord.items.length} 条</span>
+              </div>
+              <table className="detail-table">
+                <thead>
+                  <tr>
+                    <th>序号</th>
+                    <th>文件编号</th>
+                    <th>责任者</th>
+                    <th>文件题名</th>
+                    <th>文件日期</th>
+                    <th>页号</th>
+                    <th>备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewRecord.items.map((item, index) => (
+                    <tr key={`${item.sequence}-${item.fileCode}-${index}`}>
+                      <td>{item.sequence || "/"}</td>
+                      <td>{item.fileCode || "/"}</td>
+                      <td>{item.owner || "/"}</td>
+                      <td>{item.title || "/"}</td>
+                      <td>{item.fileDate || "/"}</td>
+                      <td>{item.pageNo || "/"}</td>
+                      <td>{item.note || "/"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
+}
+
+async function showOperationError(error: unknown) {
+  await showDialogMessage(error instanceof Error ? error.message : String(error), {
+    title: "操作失败",
+    kind: "error",
+  });
 }
 
 function SummaryItem({ label, value }: { label: string; value: number }) {
@@ -302,6 +376,26 @@ function PreviewItem({ label, value }: { label: string; value: string }) {
       <strong>{value || "/"}</strong>
     </div>
   );
+}
+
+function getRecordPreviewFields(record: ArchiveRecord): Array<{ label: string; value: string }> {
+  return [
+    { label: "分类号", value: record.categoryCode },
+    { label: "档号", value: record.archiveCode },
+    { label: "案卷题名", value: record.fullTitle },
+    { label: "项目名称", value: record.projectName },
+    { label: "案卷标题", value: record.volumeTitle },
+    { label: "责任者", value: record.owner },
+    { label: "立卷单位", value: record.filingUnit },
+    { label: "保管期限", value: record.retentionPeriod },
+    { label: "开始日期", value: record.startDate },
+    { label: "结束日期", value: record.endDate },
+    { label: "起止日期", value: record.dateRange },
+    { label: "本卷共有", value: `${record.totalPages} 页` },
+    { label: "文字材料", value: `${record.textPages} 页` },
+    { label: "图样", value: `${record.drawingPages} 页` },
+    { label: "卷内明细", value: `${record.items.length} 条` },
+  ];
 }
 
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
