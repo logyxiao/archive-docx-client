@@ -10,6 +10,8 @@ const TEMPLATE_PATHS: Record<TemplateName, string> = {
   spine: "/templates/spine.docx",
 };
 const COVER_NOTE_GROUP_DIR = "案卷大封面和备考表";
+const NARROW_SPINE_WIDTH_TWIPS = 1077;
+const WIDE_SPINE_WIDTH_TWIPS = 2155;
 
 export async function loadTemplate(name: TemplateName): Promise<ArrayBuffer> {
   const response = await fetch(TEMPLATE_PATHS[name]);
@@ -49,9 +51,10 @@ export async function generateArchiveDocs(
   };
 
   for (const record of selected) {
+    const shouldGroupCoverAndNote = Boolean(templates.cover && templates.note);
     const recordOutputDir =
-      templates.cover && templates.note
-        ? joinPath(joinPath(options.outputDir, COVER_NOTE_GROUP_DIR), sanitizeFileName(record.archiveCode + record.fullTitle))
+      shouldGroupCoverAndNote
+        ? joinPath(joinPath(options.outputDir, COVER_NOTE_GROUP_DIR), sanitizeFileName(record.archiveCode))
         : options.outputDir;
 
     if (templates.cover) {
@@ -150,7 +153,7 @@ export function spineData(records: ArchiveRecord[]): Record<string, string | num
 }
 
 export function spineColumnWidthTwips(record?: ArchiveRecord): number {
-  return record && record.totalPages > 200 ? 2268 : 1134;
+  return record && record.totalPages > 200 ? WIDE_SPINE_WIDTH_TWIPS : NARROW_SPINE_WIDTH_TWIPS;
 }
 
 export function formatSpineDocx(bytes: Uint8Array, records: ArchiveRecord[]): Uint8Array {
@@ -166,14 +169,14 @@ export function formatSpineDocx(bytes: Uint8Array, records: ArchiveRecord[]): Ui
 
   let gridIndex = 0;
   xml = xml.replace(/<w:gridCol w:w="\d+"\s*\/>/g, () => {
-    const width = widths[gridIndex] ?? 1134;
+    const width = widths[gridIndex] ?? NARROW_SPINE_WIDTH_TWIPS;
     gridIndex += 1;
     return `<w:gridCol w:w="${width}"/>`;
   });
 
   let cellIndex = 0;
   xml = xml.replace(/<w:tcW w:w="\d+" w:type="dxa"\s*\/>/g, () => {
-    const width = widths[cellIndex % 7] ?? 1134;
+    const width = widths[cellIndex % 7] ?? NARROW_SPINE_WIDTH_TWIPS;
     cellIndex += 1;
     return `<w:tcW w:w="${width}" w:type="dxa"/>`;
   });

@@ -82,8 +82,37 @@ describe("renderDocx", () => {
     );
 
     expect(paths).toEqual([
-      `/tmp/archive-output/案卷大封面和备考表/${record.archiveCode}${record.fullTitle}/${coverFileName(record)}`,
-      `/tmp/archive-output/案卷大封面和备考表/${record.archiveCode}${record.fullTitle}/${noteFileName(record)}`,
+      `/tmp/archive-output/案卷大封面和备考表/${record.archiveCode}/${coverFileName(record)}`,
+      `/tmp/archive-output/案卷大封面和备考表/${record.archiveCode}/${noteFileName(record)}`,
+    ]);
+  });
+
+  it("generates cover, note, and spine when all document types are selected", async () => {
+    globalThis.fetch = async (input) => {
+      const path = `public${String(input)}`;
+      return new Response(readFileSync(path));
+    };
+    const paths: string[] = [];
+
+    await generateArchiveDocs(
+      [record],
+      {
+        selectedCodes: [record.archiveCode],
+        backupNote: "",
+        outputDir: "/tmp/archive-output",
+        generateCover: true,
+        generateNote: true,
+        generateSpine: true,
+      },
+      async (path) => {
+        paths.push(path);
+      },
+    );
+
+    expect(paths).toEqual([
+      `/tmp/archive-output/案卷大封面和备考表/${record.archiveCode}/${coverFileName(record)}`,
+      `/tmp/archive-output/案卷大封面和备考表/${record.archiveCode}/${noteFileName(record)}`,
+      `/tmp/archive-output/${spineFileName([record])}`,
     ]);
   });
 
@@ -111,10 +140,10 @@ describe("renderDocx", () => {
     const bytes = formatSpineDocx(renderDocx(template, spineData([largeRecord, record])), [largeRecord, record]);
     const xml = await docxText(bytes);
 
-    expect(spineColumnWidthTwips(largeRecord)).toBe(2268);
-    expect(spineColumnWidthTwips(record)).toBe(1134);
-    expect(xml).toContain('<w:gridCol w:w="2268"/>');
-    expect(xml).toContain('<w:gridCol w:w="1134"/>');
+    expect(spineColumnWidthTwips(largeRecord)).toBe(2155);
+    expect(spineColumnWidthTwips(record)).toBe(1077);
+    expect(xml).toContain('<w:gridCol w:w="2155"/>');
+    expect(xml).toContain('<w:gridCol w:w="1077"/>');
     expect(xml).toContain('<w:textDirection w:val="tbLrV"/>');
   });
 });
