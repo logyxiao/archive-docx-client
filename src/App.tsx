@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import "./App.css";
+import { generateArchiveCatalog } from "./lib/catalog";
 import { generateArchiveDocs } from "./lib/docx";
 import { parseArchiveWorkbook } from "./lib/excel";
 import { readBinaryFile, writeBinaryFile } from "./lib/tauriFiles";
@@ -36,6 +37,7 @@ function App() {
   const [generateCover, setGenerateCover] = useState(true);
   const [generateNote, setGenerateNote] = useState(true);
   const [generateSpine, setGenerateSpine] = useState(true);
+  const [generateCatalogWorkbook, setGenerateCatalogWorkbook] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -53,7 +55,8 @@ function App() {
     );
   }, [query, records]);
 
-  const canGenerate = selectedCodes.length > 0 && outputDir && (generateCover || generateNote || generateSpine);
+  const shouldGenerateDocx = generateCover || generateNote || generateSpine;
+  const canGenerate = selectedCodes.length > 0 && outputDir && (shouldGenerateDocx || generateCatalogWorkbook);
   const previewIndex = previewRecord
     ? filteredRecords.findIndex((record) => record.archiveCode === previewRecord.archiveCode)
     : -1;
@@ -139,25 +142,45 @@ function App() {
     setIsGenerating(true);
 
     try {
-      const generated = await generateArchiveDocs(
-        records,
-        {
-          selectedCodes,
-          backupNote,
-          outputDir,
-          generateCover,
-          generateNote,
-          generateSpine,
-        },
-        writeBinaryFile,
-      );
-      if (generated.errors.length > 0) {
+      let generatedFileCount = 0;
+      const errors: string[] = [];
+
+      if (shouldGenerateDocx) {
+        const generated = await generateArchiveDocs(
+          records,
+          {
+            selectedCodes,
+            backupNote,
+            outputDir,
+            generateCover,
+            generateNote,
+            generateSpine,
+          },
+          writeBinaryFile,
+        );
+        generatedFileCount += generated.files.length;
+        errors.push(...generated.errors);
+      }
+
+      if (generateCatalogWorkbook) {
+        await generateArchiveCatalog(
+          records,
+          {
+            selectedCodes,
+            outputDir,
+          },
+          writeBinaryFile,
+        );
+        generatedFileCount += 1;
+      }
+
+      if (errors.length > 0) {
         await showDialogMessage(
-          `生成完成：${generated.files.length} 个文件，${generated.errors.length} 个失败。\n\n${generated.errors.join("\n")}`,
+          `生成完成：${generatedFileCount} 个文件，${errors.length} 个失败。\n\n${errors.join("\n")}`,
           { title: "生成完成", kind: "warning" },
         );
       } else {
-        await showDialogMessage(`生成成功，共生成 ${generated.files.length} 个文件。`, {
+        await showDialogMessage(`生成成功，共生成 ${generatedFileCount} 个文件。`, {
           title: "生成成功",
           kind: "info",
         });
@@ -179,7 +202,7 @@ function App() {
         <div className="summary-strip">
           <SummaryItem label="案卷" value={records.length} />
           <SummaryItem label="已选" value={selectedCodes.length} />
-          <SummaryItem label="待生成" value={estimateFileCount(selectedCodes.length, generateCover, generateNote, generateSpine)} />
+          <SummaryItem label="待生成" value={estimateFileCount(selectedCodes.length, generateCover, generateNote, generateSpine, generateCatalogWorkbook)} />
         </div>
       </header>
 
@@ -263,6 +286,7 @@ function App() {
                   <Toggle checked={generateCover} onChange={setGenerateCover} label="案卷大封面" />
                   <Toggle checked={generateNote} onChange={setGenerateNote} label="备考表" />
                   <Toggle checked={generateSpine} onChange={setGenerateSpine} label="案卷脊背" />
+                  <Toggle checked={generateCatalogWorkbook} onChange={setGenerateCatalogWorkbook} label="目录台账" />
                 </div>
                 <label className="note-field">
                   <span>备考表其它情况</span>
@@ -275,7 +299,7 @@ function App() {
                 <div className="generation-actions">
                   <button className="generate-button" onClick={generate} disabled={!canGenerate || isGenerating}>
                     {isGenerating ? <Loader2 className="spin" size={18} /> : <FileText size={18} />}
-                    生成 DOCX
+                    生成文件
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />
@@ -424,8 +448,8 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (che
   );
 }
 
-function estimateFileCount(count: number, cover: boolean, note: boolean, spine: boolean): number {
-  return count * Number(cover) + count * Number(note) + (spine ? Math.ceil(count / 7) : 0);
+function estimateFileCount(count: number, cover: boolean, note: boolean, spine: boolean, catalog: boolean): number {
+  return count * Number(cover) + count * Number(note) + (spine ? Math.ceil(count / 7) : 0) + Number(catalog && count > 0);
 }
 
 export default App;
