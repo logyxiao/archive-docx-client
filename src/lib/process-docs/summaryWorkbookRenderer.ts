@@ -80,7 +80,7 @@ function subunitProjectName(title: string): string {
   return title
     .replace(/^\s*\d+[、.．\-\s]*/, "")
     .replace(/^.*?项目\s*/, "")
-    .replace(/\s*质量报验申请及验收记录\s*$/, "")
+    .replace(/\s*质量(?:报验申请|报审表)及验收记录\s*$/, "")
     .trim();
 }
 

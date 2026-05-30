@@ -20,16 +20,6 @@ export async function loadProcessTemplate(templateFile: string): Promise<ArrayBu
   return response.arrayBuffer();
 }
 
-export function groupTemplatesBySequence(templates: ProcessTemplate[]): Map<number, ProcessTemplate[]> {
-  const grouped = new Map<number, ProcessTemplate[]>();
-  for (const template of templates) {
-    const group = grouped.get(template.sequence) ?? [];
-    group.push(template);
-    grouped.set(template.sequence, group);
-  }
-  return grouped;
-}
-
 export function findStartReportTemplate(templates: ProcessTemplate[]): ProcessTemplate | undefined {
   return templates.find((template) => template.templateFile === "开工报审.docx")
     ?? templates.find((template) => template.kind === "docx" && template.originalName.includes("开工报审"));
@@ -45,7 +35,7 @@ export function isStartReportItemTitle(title: string): boolean {
 }
 
 export function isSubunitQualityItemTitle(title: string): boolean {
-  return /子单位(?:工程)?/.test(title) && title.includes("质量报验申请及验收记录");
+  return /子单位(?:工程)?/.test(title) && /质量(?:报验申请|报审表)及验收记录/.test(title);
 }
 
 export function getProcessRecordApplicability(record: ArchiveRecord): { isApplicable: boolean; matchedKeywords: string[] } {

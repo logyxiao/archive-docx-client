@@ -8,7 +8,6 @@ import {
   findStartReportTemplate,
   findSubunitQualityTemplate,
   getProcessRecordApplicability,
-  groupTemplatesBySequence,
   isStartReportItemTitle,
   isSubunitQualityItemTitle,
   isSubunitQualityTemplate,
@@ -26,7 +25,6 @@ export async function generateProcessDocs(
   writeFile: (path: string, bytes: Uint8Array) => Promise<void>,
 ): Promise<ProcessGenerationResult> {
   const manifest = await loadProcessManifest();
-  const templatesBySequence = groupTemplatesBySequence(manifest.templates);
   const startReportTemplate = findStartReportTemplate(manifest.templates);
   const subunitQualityTemplate = findSubunitQualityTemplate(manifest.templates);
   const selectedTemplateCategories = normalizeProcessTemplateCategories(options.selectedTemplateCategories);
@@ -48,9 +46,8 @@ export async function generateProcessDocs(
     );
 
     for (const item of record.items) {
-      const allTemplates = matchingTemplatesForItem(item, templatesBySequence, startReportTemplate, subunitQualityTemplate);
+      const allTemplates = matchingTemplatesForItem(item, startReportTemplate, subunitQualityTemplate);
       if (allTemplates.length === 0) {
-        skipped.push(`${record.archiveCode} 第 ${item.sequence || "?"} 条：未找到模板`);
         continue;
       }
 
@@ -80,7 +77,6 @@ export async function generateProcessDocs(
 
 function matchingTemplatesForItem(
   item: ArchiveItem,
-  templatesBySequence: Map<number, ProcessTemplate[]>,
   startReportTemplate: ProcessTemplate | undefined,
   subunitQualityTemplate: ProcessTemplate | undefined,
 ): ProcessTemplate[] {
@@ -90,7 +86,7 @@ function matchingTemplatesForItem(
   if (isSubunitQualityItemTitle(item.title) && subunitQualityTemplate) {
     return [subunitQualityTemplate];
   }
-  return templatesBySequence.get(Number(item.sequence)) ?? [];
+  return [];
 }
 
 async function renderProcessTemplate(
