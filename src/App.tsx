@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ask, message as showDialogMessage, open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -28,11 +28,58 @@ import type { ArchiveRecord } from "./lib/types";
 
 const DEFAULT_BACKUP_NOTE = "";
 const LAST_OUTPUT_DIR_KEY = "archive-docx-client:last-output-dir";
+const PROCESS_FIELDS_KEY = "archive-docx-client:process-fields";
 const ARCHIVE_DOCX_TAB = "archive-docx";
 const PROCESS_DOCS_TAB = "process-docs";
 
+interface SavedProcessFields {
+  generalContractorUnit: string;
+  generalContractorManager: string;
+  generalContractorTechnicalLeader: string;
+  constructionUnit: string;
+  constructionManager: string;
+  constructionTechnicalLeader: string;
+  subcontractorUnit: string;
+  subcontractorManager: string;
+  subcontractorTechnicalLeader: string;
+  supervisionDepartment: string;
+}
+
+const EMPTY_PROCESS_FIELDS: SavedProcessFields = {
+  generalContractorUnit: "",
+  generalContractorManager: "",
+  generalContractorTechnicalLeader: "",
+  constructionUnit: "",
+  constructionManager: "",
+  constructionTechnicalLeader: "",
+  subcontractorUnit: "",
+  subcontractorManager: "",
+  subcontractorTechnicalLeader: "",
+  supervisionDepartment: "",
+};
+
+function loadSavedProcessFields(): SavedProcessFields {
+  try {
+    const rawValue = localStorage.getItem(PROCESS_FIELDS_KEY);
+    if (!rawValue) {
+      return EMPTY_PROCESS_FIELDS;
+    }
+
+    const parsed = JSON.parse(rawValue) as Partial<SavedProcessFields>;
+    return {
+      ...EMPTY_PROCESS_FIELDS,
+      ...Object.fromEntries(
+        Object.entries(parsed).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
+      ),
+    };
+  } catch {
+    return EMPTY_PROCESS_FIELDS;
+  }
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState(ARCHIVE_DOCX_TAB);
+  const savedProcessFields = useMemo(loadSavedProcessFields, []);
   const [excelPath, setExcelPath] = useState("");
   const [outputDir, setOutputDir] = useState(() => localStorage.getItem(LAST_OUTPUT_DIR_KEY) ?? "");
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
@@ -44,16 +91,16 @@ function App() {
   const [generateNote, setGenerateNote] = useState(true);
   const [generateSpine, setGenerateSpine] = useState(true);
   const [generateCatalogWorkbook, setGenerateCatalogWorkbook] = useState(true);
-  const [processGeneralContractorUnit, setProcessGeneralContractorUnit] = useState("");
-  const [processGeneralContractorManager, setProcessGeneralContractorManager] = useState("");
-  const [processGeneralContractorTechnicalLeader, setProcessGeneralContractorTechnicalLeader] = useState("");
-  const [processConstructionUnit, setProcessConstructionUnit] = useState("");
-  const [processConstructionManager, setProcessConstructionManager] = useState("");
-  const [processConstructionTechnicalLeader, setProcessConstructionTechnicalLeader] = useState("");
-  const [processSubcontractorUnit, setProcessSubcontractorUnit] = useState("");
-  const [processSubcontractorManager, setProcessSubcontractorManager] = useState("");
-  const [processSubcontractorTechnicalLeader, setProcessSubcontractorTechnicalLeader] = useState("");
-  const [processSupervisionDepartment, setProcessSupervisionDepartment] = useState("");
+  const [processGeneralContractorUnit, setProcessGeneralContractorUnit] = useState(savedProcessFields.generalContractorUnit);
+  const [processGeneralContractorManager, setProcessGeneralContractorManager] = useState(savedProcessFields.generalContractorManager);
+  const [processGeneralContractorTechnicalLeader, setProcessGeneralContractorTechnicalLeader] = useState(savedProcessFields.generalContractorTechnicalLeader);
+  const [processConstructionUnit, setProcessConstructionUnit] = useState(savedProcessFields.constructionUnit);
+  const [processConstructionManager, setProcessConstructionManager] = useState(savedProcessFields.constructionManager);
+  const [processConstructionTechnicalLeader, setProcessConstructionTechnicalLeader] = useState(savedProcessFields.constructionTechnicalLeader);
+  const [processSubcontractorUnit, setProcessSubcontractorUnit] = useState(savedProcessFields.subcontractorUnit);
+  const [processSubcontractorManager, setProcessSubcontractorManager] = useState(savedProcessFields.subcontractorManager);
+  const [processSubcontractorTechnicalLeader, setProcessSubcontractorTechnicalLeader] = useState(savedProcessFields.subcontractorTechnicalLeader);
+  const [processSupervisionDepartment, setProcessSupervisionDepartment] = useState(savedProcessFields.supervisionDepartment);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingProcess, setIsGeneratingProcess] = useState(false);
@@ -78,6 +125,33 @@ function App() {
   const previewIndex = previewRecord
     ? filteredRecords.findIndex((record) => record.archiveCode === previewRecord.archiveCode)
     : -1;
+
+  useEffect(() => {
+    const fields: SavedProcessFields = {
+      generalContractorUnit: processGeneralContractorUnit,
+      generalContractorManager: processGeneralContractorManager,
+      generalContractorTechnicalLeader: processGeneralContractorTechnicalLeader,
+      constructionUnit: processConstructionUnit,
+      constructionManager: processConstructionManager,
+      constructionTechnicalLeader: processConstructionTechnicalLeader,
+      subcontractorUnit: processSubcontractorUnit,
+      subcontractorManager: processSubcontractorManager,
+      subcontractorTechnicalLeader: processSubcontractorTechnicalLeader,
+      supervisionDepartment: processSupervisionDepartment,
+    };
+    localStorage.setItem(PROCESS_FIELDS_KEY, JSON.stringify(fields));
+  }, [
+    processGeneralContractorUnit,
+    processGeneralContractorManager,
+    processGeneralContractorTechnicalLeader,
+    processConstructionUnit,
+    processConstructionManager,
+    processConstructionTechnicalLeader,
+    processSubcontractorUnit,
+    processSubcontractorManager,
+    processSubcontractorTechnicalLeader,
+    processSupervisionDepartment,
+  ]);
 
   async function chooseExcel() {
     const selected = await open({

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
-import { generateProcessDocs, renderProcessDocx, renderProcessWorkbook } from "../lib/processDocs";
+import { generateProcessDocs, renderProcessDocx, renderProcessWorkbook, renderSummaryWorkbook } from "../lib/processDocs";
 import type { ArchiveRecord } from "../lib/types";
 
 const processRecord = createProcessRecord();
@@ -159,6 +159,43 @@ describe("process docs generation", () => {
     const sheet = workbook.worksheets[0];
 
     expect(sheet.getCell("AE11").value).toBe("施工技术负责人");
+  });
+
+  it("keeps summary workbook header merge and style intact", async () => {
+    const summaryTemplates = [
+      "/templates/process-docs/template-002.xlsx",
+      "/templates/process-docs/template-006.xlsx",
+      "/templates/process-docs/template-034.xlsx",
+      "/templates/process-docs/template-045.xlsx",
+    ];
+
+    for (const templatePath of summaryTemplates) {
+      const template = readPublic(templatePath);
+      const source = await workbookFrom(template);
+      const renderedBytes = renderSummaryWorkbook(template, processRecord, {
+        generalContractorUnit: "测试总承包单位",
+        generalContractorProjectManager: "总包负责人",
+        generalContractorTechnicalLeader: "总包技术负责人",
+        constructionUnit: "测试施工单位",
+        constructionProjectManager: "施工负责人",
+        constructionTechnicalLeader: "施工技术负责人",
+        subcontractorUnit: "测试分包单位",
+        subcontractorProjectManager: "分包负责人",
+      });
+      const rendered = await workbookFrom(renderedBytes);
+      const sourceZip = await JSZip.loadAsync(template);
+      const renderedZip = await JSZip.loadAsync(renderedBytes);
+
+      expect(rendered.worksheets[0].getCell("B2").style).toEqual(source.worksheets[0].getCell("B2").style);
+      expect(rendered.worksheets[0].getCell("B2").isMerged).toBe(source.worksheets[0].getCell("B2").isMerged);
+      expect(rendered.worksheets[0].getCell("C2").master.address).toBe(source.worksheets[0].getCell("C2").master.address);
+      expect(await renderedZip.file("xl/styles.xml")!.async("string")).toBe(await sourceZip.file("xl/styles.xml")!.async("string"));
+      expect(rendered.worksheets[0].getCell("G7").value).toBe("测试总承包单位");
+      expect(rendered.worksheets[0].getCell("G8").value).toBe("测试施工单位");
+      expect(rendered.worksheets[0].getCell("G9").value).toBe("测试分包单位");
+      expect(rendered.worksheets[0].getCell("U7").value).toBe("总包负责人");
+      expect(rendered.worksheets[0].getCell("AF8").value).toBe("施工技术负责人");
+    }
   });
 });
 

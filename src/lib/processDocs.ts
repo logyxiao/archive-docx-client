@@ -123,8 +123,12 @@ async function renderProcessTemplate(
   userFields: ProcessUserFields,
 ): Promise<Uint8Array> {
   const bytes = await loadProcessTemplate(template.templateFile);
-  return template.kind === "docx"
-    ? renderProcessDocx(bytes, record, item, userFields)
+  if (template.kind === "docx") {
+    return renderProcessDocx(bytes, record, item, userFields);
+  }
+
+  return isSummaryWorkbookTemplate(template)
+    ? renderSummaryWorkbook(bytes, record, userFields)
     : renderProcessWorkbook(bytes, record, item, userFields);
 }
 
@@ -209,9 +213,64 @@ export async function renderProcessWorkbook(
   return new Uint8Array(buffer);
 }
 
+export function renderSummaryWorkbook(
+  template: ArrayBuffer | Uint8Array,
+  record: ArchiveRecord,
+  userFields: ProcessUserFields = {},
+): Uint8Array {
+  const zip = new PizZip(template);
+  const sheet = zip.file("xl/worksheets/sheet1.xml");
+  if (!sheet) {
+    throw new Error("无法读取汇总表模板工作表");
+  }
+
+  const defaultUnit = record.filingUnit || record.owner;
+  let xml = sheet.asText();
+  xml = setInlineStringCell(xml, "F4", archiveProjectCode(record.archiveCode));
+  xml = setInlineStringCell(xml, "G7", userFields.generalContractorUnit ?? defaultUnit);
+  xml = setInlineStringCell(xml, "U7", userFields.generalContractorProjectManager ?? userFields.projectManager ?? "");
+  xml = setInlineStringCell(xml, "AF7", userFields.generalContractorTechnicalLeader ?? userFields.projectTechnicalLeader ?? "");
+  xml = setInlineStringCell(xml, "G8", userFields.constructionUnit ?? defaultUnit);
+  xml = setInlineStringCell(xml, "U8", userFields.constructionProjectManager ?? userFields.projectManager ?? "");
+  xml = setInlineStringCell(xml, "AF8", userFields.constructionTechnicalLeader ?? userFields.projectTechnicalLeader ?? "");
+  xml = setInlineStringCell(xml, "G9", userFields.subcontractorUnit ?? "");
+  xml = setInlineStringCell(xml, "U9", userFields.subcontractorProjectManager ?? "");
+  xml = setInlineStringCell(xml, "AF9", "");
+
+  zip.file("xl/worksheets/sheet1.xml", xml);
+  return zip.generate({ type: "uint8array", compression: "DEFLATE" });
+}
+
+function isSummaryWorkbookTemplate(template: ProcessTemplate): boolean {
+  return template.kind === "xlsx" && template.originalName.includes("汇总用");
+}
+
+function setInlineStringCell(xml: string, address: string, value: string): string {
+  const escapedAddress = escapeRegExp(address);
+  const selfClosingPattern = new RegExp(`<c([^>]*\\br="${escapedAddress}"[^>]*)\\/>`);
+  if (selfClosingPattern.test(xml)) {
+    return xml.replace(selfClosingPattern, (_match, attrs: string) => inlineStringCellXml(attrs, value));
+  }
+
+  const cellPattern = new RegExp(`<c([^>]*\\br="${escapedAddress}"[^>]*)>[\\s\\S]*?<\\/c>`);
+  return xml.replace(cellPattern, (_match, attrs: string) => inlineStringCellXml(attrs, value));
+}
+
+function inlineStringCellXml(attrs: string, value: string): string {
+  const cleanAttrs = attrs.replace(/\s+t="[^"]*"/, "").replace(/\s*\/\s*$/, "");
+  return `<c${cleanAttrs} t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function applyWorkbookValues(sheet: ExcelJS.Worksheet, record: ArchiveRecord, item: ArchiveItem, userFields: ProcessUserFields) {
   for (const row of sheet.getRows(1, sheet.rowCount) ?? []) {
     row.eachCell({ includeEmpty: true }, (cell) => {
+      if (isMergedSlave(cell)) {
+        return;
+      }
       if (typeof cell.value === "string") {
         cell.value = replaceBusinessText(cell.value, record, item, userFields);
       }
@@ -292,6 +351,9 @@ function fillOrClearProfessionalForeman(sheet: ExcelJS.Worksheet, value: string)
 function rowHasExactLabel(row: ExcelJS.Row, label: string): boolean {
   let hasLabel = false;
   row.eachCell({ includeEmpty: false }, (cell) => {
+    if (isMergedSlave(cell)) {
+      return;
+    }
     if (normalizeCellText(cell) === label) {
       hasLabel = true;
     }
@@ -302,6 +364,9 @@ function rowHasExactLabel(row: ExcelJS.Row, label: string): boolean {
 function fillOrClearAfterLabelInRow(row: ExcelJS.Row, labels: string[], value: string) {
   const targets: ExcelJS.Cell[] = [];
   row.eachCell({ includeEmpty: false }, (cell) => {
+    if (isMergedSlave(cell)) {
+      return;
+    }
     const text = normalizeCellText(cell);
     if (!labels.some((label) => text === label)) {
       return;
@@ -352,6 +417,9 @@ function cellsMatchingLabels(sheet: ExcelJS.Worksheet, labels: string[]): ExcelJ
   const cells: ExcelJS.Cell[] = [];
   for (const row of sheet.getRows(1, sheet.rowCount) ?? []) {
     row.eachCell({ includeEmpty: false }, (cell) => {
+      if (isMergedSlave(cell)) {
+        return;
+      }
       const value = typeof cell.value === "string" ? cell.value.replace(/\s+/g, "") : "";
       if (labels.some((label) => value.includes(label))) {
         cells.push(cell);
@@ -359,6 +427,11 @@ function cellsMatchingLabels(sheet: ExcelJS.Worksheet, labels: string[]): ExcelJ
     });
   }
   return cells;
+}
+
+function isMergedSlave(cell: ExcelJS.Cell): boolean {
+  const maybeMerged = cell as ExcelJS.Cell & { master?: ExcelJS.Cell };
+  return cell.isMerged && Boolean(maybeMerged.master) && maybeMerged.master !== cell;
 }
 
 function cellToRightOfMergedRange(sheet: ExcelJS.Worksheet, cell: ExcelJS.Cell): ExcelJS.Cell {
