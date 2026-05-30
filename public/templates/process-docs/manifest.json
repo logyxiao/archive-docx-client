@@ -5,14 +5,14 @@
       "sequence": 1,
       "kind": "docx",
       "originalName": "1、5028G01-SG-ZHHC-KG-01高明分布式项目 并网点光伏发电系统单位工程开工报审.docx",
-      "templateFile": "template-001.docx",
+      "templateFile": "开工报审.docx",
       "outputExtension": ".docx"
     },
     {
       "sequence": 2,
       "kind": "xlsx",
       "originalName": "2、5028G01-SG-ZHHC-01-001高明分布式项目 光伏方阵安装子单位工程质量验收记录（汇总用）.xls",
-      "templateFile": "template-002.xlsx",
+      "templateFile": "子单位工程质量验收记录.xlsx",
       "outputExtension": ".xlsx"
     },
     {

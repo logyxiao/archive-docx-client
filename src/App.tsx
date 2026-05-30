@@ -40,6 +40,7 @@ const ARCHIVE_DOCX_TAB = "archive-docx";
 const PROCESS_DOCS_TAB = "process-docs";
 
 interface SavedProcessFields {
+  projectName: string;
   generalContractorUnit: string;
   generalContractorManager: string;
   generalContractorTechnicalLeader: string;
@@ -53,6 +54,7 @@ interface SavedProcessFields {
 }
 
 const EMPTY_PROCESS_FIELDS: SavedProcessFields = {
+  projectName: "",
   generalContractorUnit: "",
   generalContractorManager: "",
   generalContractorTechnicalLeader: "",
@@ -124,6 +126,7 @@ function App() {
   const [generateNote, setGenerateNote] = useState(true);
   const [generateSpine, setGenerateSpine] = useState(true);
   const [generateCatalogWorkbook, setGenerateCatalogWorkbook] = useState(true);
+  const [processProjectName, setProcessProjectName] = useState(savedProcessFields.projectName);
   const [processGeneralContractorUnit, setProcessGeneralContractorUnit] = useState(savedProcessFields.generalContractorUnit);
   const [processGeneralContractorManager, setProcessGeneralContractorManager] = useState(savedProcessFields.generalContractorManager);
   const [processGeneralContractorTechnicalLeader, setProcessGeneralContractorTechnicalLeader] = useState(savedProcessFields.generalContractorTechnicalLeader);
@@ -167,6 +170,7 @@ function App() {
 
   useEffect(() => {
     const fields: SavedProcessFields = {
+      projectName: processProjectName,
       generalContractorUnit: processGeneralContractorUnit,
       generalContractorManager: processGeneralContractorManager,
       generalContractorTechnicalLeader: processGeneralContractorTechnicalLeader,
@@ -180,6 +184,7 @@ function App() {
     };
     localStorage.setItem(PROCESS_FIELDS_KEY, JSON.stringify(fields));
   }, [
+    processProjectName,
     processGeneralContractorUnit,
     processGeneralContractorManager,
     processGeneralContractorTechnicalLeader,
@@ -384,6 +389,7 @@ function App() {
           outputDir,
           selectedTemplateCategories: selectedProcessTemplateCategories,
           userFields: {
+            projectName: processProjectName.trim(),
             generalContractorUnit: processGeneralContractorUnit.trim(),
             generalContractorProjectManager: processGeneralContractorManager.trim(),
             generalContractorTechnicalLeader: processGeneralContractorTechnicalLeader.trim(),
@@ -618,6 +624,13 @@ function App() {
               </button>
             </div>
             <div className="process-field-grid modal-process-field-grid">
+              <label className="text-field">
+                <span>工程名称</span>
+                <input
+                  value={processProjectName}
+                  onChange={(event) => setProcessProjectName(event.currentTarget.value)}
+                />
+              </label>
               <label className="text-field">
                 <span>总承包单位</span>
                 <input

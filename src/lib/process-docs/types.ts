@@ -27,6 +27,7 @@ export interface ProcessGenerationResult {
 }
 
 export interface ProcessUserFields {
+  projectName?: string;
   projectManager?: string;
   projectTechnicalLeader?: string;
   generalContractorUnit?: string;

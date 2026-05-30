@@ -19,7 +19,7 @@ export interface ProcessTemplateCategoryOption {
 
 export const PROCESS_TEMPLATE_CATEGORIES: ProcessTemplateCategoryOption[] = [
   { id: "start-report", label: "开工报审" },
-  { id: "summary-quality-acceptance", label: "质量验收记录（汇总用）" },
+  { id: "summary-quality-acceptance", label: "子单位工程质量验收记录" },
   { id: "inspection-application", label: "报验申请单" },
   { id: "quality-acceptance", label: "分项/分部质量验收" },
   { id: "inspection-lot-acceptance", label: "检验批质量验收记录" },
@@ -42,7 +42,7 @@ export function getProcessTemplateCategory(template: ProcessTemplate): ProcessTe
     return "start-report";
   }
 
-  if (name.includes("质量验收记录（汇总用）")) {
+  if (template.templateFile === "子单位工程质量验收记录.xlsx") {
     return "summary-quality-acceptance";
   }
 

@@ -1,6 +1,6 @@
 import PizZip from "pizzip";
 import type { ArchiveItem, ArchiveRecord } from "../types";
-import { replaceBusinessText } from "./textReplacement";
+import { replaceBusinessText, replaceStartReportScopeText } from "./textReplacement";
 import type { ProcessUserFields } from "./types";
 import { escapeXml, unescapeXml } from "./utils";
 
@@ -16,24 +16,27 @@ export function renderProcessDocx(
     if (!file) {
       continue;
     }
-    zip.file(path, replaceDocxParagraphs(replaceBusinessText(file.asText(), record, item, userFields), item));
+    zip.file(path, replaceDocxParagraphs(replaceBusinessText(file.asText(), record, item, userFields), record, item, userFields));
   }
 
   return zip.generate({ type: "uint8array", compression: "DEFLATE" });
 }
 
-function replaceDocxParagraphs(xml: string, item: ArchiveItem): string {
-  if (!item.fileCode || item.fileCode === "/") {
-    return xml;
-  }
-
+function replaceDocxParagraphs(xml: string, record: ArchiveRecord, item: ArchiveItem, userFields: ProcessUserFields): string {
+  const projectName = userFields.projectName?.trim() || record.projectName;
   return xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
     const text = paragraphText(paragraph);
-    if (!text.includes("编号：") || !text.includes("5028G01")) {
-      return paragraph;
+    let nextText = text;
+
+    if (item.fileCode && item.fileCode !== "/" && text.includes("编号：") && text.includes("5028G01")) {
+      nextText = nextText.replace(/编号：.*$/, `编号：${item.fileCode}`);
     }
 
-    return replaceParagraphText(paragraph, text.replace(/编号：.*$/, `编号：${item.fileCode}`));
+    if (text.includes("我方承担的") && text.includes("已完成了")) {
+      nextText = replaceStartReportScopeText(nextText, projectName, item.title);
+    }
+
+    return nextText === text ? paragraph : replaceParagraphText(paragraph, nextText);
   });
 }
 

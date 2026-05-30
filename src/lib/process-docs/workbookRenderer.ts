@@ -27,6 +27,7 @@ export async function renderProcessWorkbook(
 
 function applyWorkbookValues(sheet: ExcelJS.Worksheet, record: ArchiveRecord, item: ArchiveItem, userFields: ProcessUserFields) {
   const fields = resolveProcessFields(userFields, item.owner || record.filingUnit);
+  const projectName = userFields.projectName?.trim() || record.projectName;
   for (const row of sheet.getRows(1, sheet.rowCount) ?? []) {
     row.eachCell({ includeEmpty: true }, (cell) => {
       if (isMergedSlave(cell)) {
@@ -38,7 +39,7 @@ function applyWorkbookValues(sheet: ExcelJS.Worksheet, record: ArchiveRecord, it
     });
   }
 
-  fillAfterLabel(sheet, ["工程名称", "工程项目名称"], record.projectName);
+  fillAfterLabel(sheet, ["工程名称", "工程项目名称"], projectName);
   fillAfterLabel(sheet, ["工程编号"], archiveProjectCode(record.archiveCode));
   fillAfterLabel(sheet, ["抽样单位"], item.owner || record.filingUnit);
   fillAfterLabel(sheet, ["抽样日期"], formatChineseDate(item.fileDate));

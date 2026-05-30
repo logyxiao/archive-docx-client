@@ -4,7 +4,18 @@ import { PROCESS_OUTPUT_DIR } from "./constants";
 import { renderProcessDocx } from "./docxRenderer";
 import { processOutputName } from "./naming";
 import { renderSummaryWorkbook } from "./summaryWorkbookRenderer";
-import { getProcessRecordApplicability, groupTemplatesBySequence, isSummaryWorkbookTemplate, loadProcessManifest, loadProcessTemplate } from "./templates";
+import {
+  findStartReportTemplate,
+  findSubunitQualityTemplate,
+  getProcessRecordApplicability,
+  groupTemplatesBySequence,
+  isStartReportItemTitle,
+  isSubunitQualityItemTitle,
+  isSubunitQualityTemplate,
+  isSummaryWorkbookTemplate,
+  loadProcessManifest,
+  loadProcessTemplate,
+} from "./templates";
 import type { GenerateProcessOptions, ProcessGenerationResult, ProcessTemplate, ProcessUserFields } from "./types";
 import { joinPath, sanitizeFileName } from "./utils";
 import { renderProcessWorkbook } from "./workbookRenderer";
@@ -16,6 +27,8 @@ export async function generateProcessDocs(
 ): Promise<ProcessGenerationResult> {
   const manifest = await loadProcessManifest();
   const templatesBySequence = groupTemplatesBySequence(manifest.templates);
+  const startReportTemplate = findStartReportTemplate(manifest.templates);
+  const subunitQualityTemplate = findSubunitQualityTemplate(manifest.templates);
   const selectedTemplateCategories = normalizeProcessTemplateCategories(options.selectedTemplateCategories);
   const selected = records.filter((record) => options.selectedCodes.includes(record.archiveCode));
   const files: ProcessGenerationResult["files"] = [];
@@ -35,8 +48,7 @@ export async function generateProcessDocs(
     );
 
     for (const item of record.items) {
-      const sequence = Number(item.sequence);
-      const allTemplates = templatesBySequence.get(sequence) ?? [];
+      const allTemplates = matchingTemplatesForItem(item, templatesBySequence, startReportTemplate, subunitQualityTemplate);
       if (allTemplates.length === 0) {
         skipped.push(`${record.archiveCode} 第 ${item.sequence || "?"} 条：未找到模板`);
         continue;
@@ -66,6 +78,21 @@ export async function generateProcessDocs(
   return { files, skipped, errors };
 }
 
+function matchingTemplatesForItem(
+  item: ArchiveItem,
+  templatesBySequence: Map<number, ProcessTemplate[]>,
+  startReportTemplate: ProcessTemplate | undefined,
+  subunitQualityTemplate: ProcessTemplate | undefined,
+): ProcessTemplate[] {
+  if (isStartReportItemTitle(item.title) && startReportTemplate) {
+    return [startReportTemplate];
+  }
+  if (isSubunitQualityItemTitle(item.title) && subunitQualityTemplate) {
+    return [subunitQualityTemplate];
+  }
+  return templatesBySequence.get(Number(item.sequence)) ?? [];
+}
+
 async function renderProcessTemplate(
   template: ProcessTemplate,
   record: ArchiveRecord,
@@ -78,6 +105,6 @@ async function renderProcessTemplate(
   }
 
   return isSummaryWorkbookTemplate(template)
-    ? renderSummaryWorkbook(bytes, record, userFields)
+    ? renderSummaryWorkbook(bytes, record, userFields, isSubunitQualityTemplate(template) ? item : undefined)
     : renderProcessWorkbook(bytes, record, item, userFields);
 }
