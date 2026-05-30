@@ -1,15 +1,19 @@
 import { useMemo, useState } from "react";
-import { message as showDialogMessage, open } from "@tauri-apps/plugin-dialog";
+import { ask, message as showDialogMessage, open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check } from "@tauri-apps/plugin-updater";
 import {
   Check,
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
   FileText,
+  FolderTree,
   FolderOpen,
   Info,
   Loader2,
+  RefreshCw,
   Search,
   Settings2,
   X,
@@ -18,12 +22,14 @@ import "./App.css";
 import { generateArchiveCatalog } from "./lib/catalog";
 import { generateArchiveDocs } from "./lib/docx";
 import { parseArchiveWorkbook } from "./lib/excel";
+import { generateProcessDocs } from "./lib/processDocs";
 import { readBinaryFile, writeBinaryFile } from "./lib/tauriFiles";
 import type { ArchiveRecord } from "./lib/types";
 
 const DEFAULT_BACKUP_NOTE = "";
 const LAST_OUTPUT_DIR_KEY = "archive-docx-client:last-output-dir";
 const ARCHIVE_DOCX_TAB = "archive-docx";
+const PROCESS_DOCS_TAB = "process-docs";
 
 function App() {
   const [activeTab, setActiveTab] = useState(ARCHIVE_DOCX_TAB);
@@ -38,8 +44,20 @@ function App() {
   const [generateNote, setGenerateNote] = useState(true);
   const [generateSpine, setGenerateSpine] = useState(true);
   const [generateCatalogWorkbook, setGenerateCatalogWorkbook] = useState(true);
+  const [processGeneralContractorUnit, setProcessGeneralContractorUnit] = useState("");
+  const [processGeneralContractorManager, setProcessGeneralContractorManager] = useState("");
+  const [processGeneralContractorTechnicalLeader, setProcessGeneralContractorTechnicalLeader] = useState("");
+  const [processConstructionUnit, setProcessConstructionUnit] = useState("");
+  const [processConstructionManager, setProcessConstructionManager] = useState("");
+  const [processConstructionTechnicalLeader, setProcessConstructionTechnicalLeader] = useState("");
+  const [processSubcontractorUnit, setProcessSubcontractorUnit] = useState("");
+  const [processSubcontractorManager, setProcessSubcontractorManager] = useState("");
+  const [processSubcontractorTechnicalLeader, setProcessSubcontractorTechnicalLeader] = useState("");
+  const [processSupervisionDepartment, setProcessSupervisionDepartment] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingProcess, setIsGeneratingProcess] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   const filteredRecords = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -103,6 +121,42 @@ function App() {
       await openPath(outputDir);
     } catch (error) {
       await showOperationError(error);
+    }
+  }
+
+  async function checkForUpdates() {
+    setIsCheckingUpdate(true);
+
+    try {
+      const update = await check();
+      if (!update) {
+        await showDialogMessage("当前已经是最新版本。", {
+          title: "检查更新",
+          kind: "info",
+        });
+        return;
+      }
+
+      const shouldInstall = await ask(
+        `发现新版本 ${update.version}。\n\n是否立即下载并安装？安装完成后应用会自动重启。`,
+        {
+          title: "发现更新",
+          kind: "info",
+          okLabel: "立即更新",
+          cancelLabel: "稍后",
+        },
+      );
+
+      if (!shouldInstall) {
+        return;
+      }
+
+      await update.downloadAndInstall();
+      await relaunch();
+    } catch (error) {
+      await showOperationError(error);
+    } finally {
+      setIsCheckingUpdate(false);
     }
   }
 
@@ -192,6 +246,107 @@ function App() {
     }
   }
 
+  async function generateProcess() {
+    if (selectedCodes.length === 0 || !outputDir) {
+      return;
+    }
+
+    setIsGeneratingProcess(true);
+
+    try {
+      const result = await generateProcessDocs(
+        records,
+        {
+          selectedCodes,
+          outputDir,
+          userFields: {
+            generalContractorUnit: processGeneralContractorUnit.trim(),
+            generalContractorProjectManager: processGeneralContractorManager.trim(),
+            generalContractorTechnicalLeader: processGeneralContractorTechnicalLeader.trim(),
+            constructionUnit: processConstructionUnit.trim(),
+            constructionProjectManager: processConstructionManager.trim(),
+            constructionTechnicalLeader: processConstructionTechnicalLeader.trim(),
+            subcontractorUnit: processSubcontractorUnit.trim(),
+            subcontractorProjectManager: processSubcontractorManager.trim(),
+            subcontractorTechnicalLeader: processSubcontractorTechnicalLeader.trim(),
+            supervisionDepartment: processSupervisionDepartment.trim(),
+          },
+        },
+        writeBinaryFile,
+      );
+      const skippedText = result.skipped.length > 0 ? `\n跳过 ${result.skipped.length} 条：\n${result.skipped.slice(0, 12).join("\n")}` : "";
+      const errorText = result.errors.length > 0 ? `\n失败 ${result.errors.length} 个：\n${result.errors.slice(0, 12).join("\n")}` : "";
+      await showDialogMessage(`过程资料生成完成：${result.files.length} 个文件。${skippedText}${errorText}`, {
+        title: result.errors.length > 0 ? "生成完成" : "生成成功",
+        kind: result.errors.length > 0 ? "warning" : "info",
+      });
+    } catch (error) {
+      await showOperationError(error);
+    } finally {
+      setIsGeneratingProcess(false);
+    }
+  }
+
+  const controlBand = (
+    <section className="control-band">
+      <button className="primary-button" onClick={chooseExcel} disabled={isLoading}>
+        {isLoading ? <Loader2 className="spin" size={18} /> : <FileSpreadsheet size={18} />}
+        选择 Excel
+      </button>
+      <button className="secondary-button" onClick={chooseOutputDir}>
+        <FolderOpen size={18} />
+        输出目录
+      </button>
+      <div className="path-stack">
+        <PathLine label="Excel" value={excelPath || "未选择"} />
+        <PathLine label="输出" value={outputDir || "未选择"} />
+      </div>
+    </section>
+  );
+
+  const recordPane = (
+    <aside className="record-pane">
+      <div className="pane-title">
+        <div>
+          <h2>案卷列表</h2>
+          <p>{filteredRecords.length} 条匹配记录</p>
+        </div>
+        <label className="select-all">
+          <input
+            type="checkbox"
+            checked={filteredRecords.length > 0 && filteredRecords.every((record) => selectedCodes.includes(record.archiveCode))}
+            onChange={(event) => toggleVisibleRecords(event.currentTarget.checked)}
+          />
+          全选
+        </label>
+      </div>
+      <label className="search-box">
+        <Search size={17} />
+        <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="搜索档号、题名、单位" />
+      </label>
+      <div className="record-list">
+        {filteredRecords.map((record) => (
+          <div
+            key={record.archiveCode}
+            className={`record-row ${selectedCodes.includes(record.archiveCode) ? "selected" : ""}`}
+          >
+            <button className="record-toggle" onClick={() => toggleCode(record.archiveCode)}>
+              <span className="checkmark">{selectedCodes.includes(record.archiveCode) ? <Check size={14} /> : null}</span>
+              <span>
+                <strong>{record.archiveCode}</strong>
+                <small>{record.fullTitle}</small>
+              </span>
+            </button>
+            <button className="icon-button" onClick={() => setPreviewRecord(record)} title="案卷详情" aria-label={`${record.archiveCode} 案卷详情`}>
+              <Info size={17} />
+            </button>
+          </div>
+        ))}
+        {records.length === 0 ? <div className="empty-state">请选择 Excel 总目录</div> : null}
+      </div>
+    </aside>
+  );
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -199,10 +354,16 @@ function App() {
           <p className="eyebrow">Archive Workspace</p>
           <h1>档案工具箱</h1>
         </div>
-        <div className="summary-strip">
-          <SummaryItem label="案卷" value={records.length} />
-          <SummaryItem label="已选" value={selectedCodes.length} />
-          <SummaryItem label="待生成" value={estimateFileCount(selectedCodes.length, generateCover, generateNote, generateSpine, generateCatalogWorkbook)} />
+        <div className="topbar-actions">
+          <button className="secondary-button update-button" onClick={checkForUpdates} disabled={isCheckingUpdate}>
+            {isCheckingUpdate ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
+            检查更新
+          </button>
+          <div className="summary-strip">
+            <SummaryItem label="案卷" value={records.length} />
+            <SummaryItem label="已选" value={selectedCodes.length} />
+            <SummaryItem label="待生成" value={estimateFileCount(selectedCodes.length, generateCover, generateNote, generateSpine, generateCatalogWorkbook)} />
+          </div>
         </div>
       </header>
 
@@ -215,66 +376,22 @@ function App() {
           <FileText size={17} />
           档案文档生成器
         </button>
+        <button
+          className={`tab-button ${activeTab === PROCESS_DOCS_TAB ? "active" : ""}`}
+          onClick={() => setActiveTab(PROCESS_DOCS_TAB)}
+          type="button"
+        >
+          <FolderTree size={17} />
+          过程资料生成
+        </button>
       </nav>
 
       {activeTab === ARCHIVE_DOCX_TAB ? (
         <section className="tab-panel">
-          <section className="control-band">
-            <button className="primary-button" onClick={chooseExcel} disabled={isLoading}>
-              {isLoading ? <Loader2 className="spin" size={18} /> : <FileSpreadsheet size={18} />}
-              选择 Excel
-            </button>
-            <button className="secondary-button" onClick={chooseOutputDir}>
-              <FolderOpen size={18} />
-              输出目录
-            </button>
-            <div className="path-stack">
-              <PathLine label="Excel" value={excelPath || "未选择"} />
-              <PathLine label="输出" value={outputDir || "未选择"} />
-            </div>
-          </section>
+          {controlBand}
 
           <section className="workspace">
-            <aside className="record-pane">
-              <div className="pane-title">
-                <div>
-                  <h2>案卷列表</h2>
-                  <p>{filteredRecords.length} 条匹配记录</p>
-                </div>
-                <label className="select-all">
-                  <input
-                    type="checkbox"
-                    checked={filteredRecords.length > 0 && filteredRecords.every((record) => selectedCodes.includes(record.archiveCode))}
-                    onChange={(event) => toggleVisibleRecords(event.currentTarget.checked)}
-                  />
-                  全选
-                </label>
-              </div>
-              <label className="search-box">
-                <Search size={17} />
-                <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="搜索档号、题名、单位" />
-              </label>
-              <div className="record-list">
-                {filteredRecords.map((record) => (
-                  <div
-                    key={record.archiveCode}
-                    className={`record-row ${selectedCodes.includes(record.archiveCode) ? "selected" : ""}`}
-                  >
-                    <button className="record-toggle" onClick={() => toggleCode(record.archiveCode)}>
-                      <span className="checkmark">{selectedCodes.includes(record.archiveCode) ? <Check size={14} /> : null}</span>
-                      <span>
-                        <strong>{record.archiveCode}</strong>
-                        <small>{record.fullTitle}</small>
-                      </span>
-                    </button>
-                    <button className="icon-button" onClick={() => setPreviewRecord(record)} title="案卷详情" aria-label={`${record.archiveCode} 案卷详情`}>
-                      <Info size={17} />
-                    </button>
-                  </div>
-                ))}
-                {records.length === 0 ? <div className="empty-state">请选择 Excel 总目录</div> : null}
-              </div>
-            </aside>
+            {recordPane}
 
             <section className="detail-pane">
               <div className="tool-section">
@@ -300,6 +417,107 @@ function App() {
                   <button className="generate-button" onClick={generate} disabled={!canGenerate || isGenerating}>
                     {isGenerating ? <Loader2 className="spin" size={18} /> : <FileText size={18} />}
                     生成文件
+                  </button>
+                  <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
+                    <FolderOpen size={18} />
+                    打开输出目录
+                  </button>
+                </div>
+              </div>
+            </section>
+          </section>
+        </section>
+      ) : null}
+
+      {activeTab === PROCESS_DOCS_TAB ? (
+        <section className="tab-panel">
+          {controlBand}
+
+          <section className="workspace">
+            {recordPane}
+
+            <section className="detail-pane">
+              <div className="tool-section">
+                <div className="section-heading">
+                  <FolderTree size={19} />
+                  <h2>过程资料生成</h2>
+                </div>
+                <div className="process-field-grid">
+                  <label className="text-field">
+                    <span>总承包单位</span>
+                    <input
+                      value={processGeneralContractorUnit}
+                      onChange={(event) => setProcessGeneralContractorUnit(event.currentTarget.value)}
+                    />
+                  </label>
+                  <label className="text-field">
+                    <span>总承包单位项目负责人</span>
+                    <input
+                      value={processGeneralContractorManager}
+                      onChange={(event) => setProcessGeneralContractorManager(event.currentTarget.value)}
+                    />
+                  </label>
+                  <label className="text-field">
+                    <span>总承包单位项目技术负责人</span>
+                    <input
+                      value={processGeneralContractorTechnicalLeader}
+                      onChange={(event) => setProcessGeneralContractorTechnicalLeader(event.currentTarget.value)}
+                    />
+                  </label>
+                  <label className="text-field">
+                    <span>施工单位</span>
+                    <input
+                      value={processConstructionUnit}
+                      onChange={(event) => setProcessConstructionUnit(event.currentTarget.value)}
+                    />
+                  </label>
+                  <label className="text-field">
+                    <span>施工单位项目负责人</span>
+                    <input
+                      value={processConstructionManager}
+                      onChange={(event) => setProcessConstructionManager(event.currentTarget.value)}
+                    />
+                  </label>
+                  <label className="text-field">
+                    <span>施工单位项目技术负责人</span>
+                    <input
+                      value={processConstructionTechnicalLeader}
+                      onChange={(event) => setProcessConstructionTechnicalLeader(event.currentTarget.value)}
+                    />
+                  </label>
+                  <label className="text-field">
+                    <span>分包单位</span>
+                    <input
+                      value={processSubcontractorUnit}
+                      onChange={(event) => setProcessSubcontractorUnit(event.currentTarget.value)}
+                    />
+                  </label>
+                  <label className="text-field">
+                    <span>分包单位项目负责人</span>
+                    <input
+                      value={processSubcontractorManager}
+                      onChange={(event) => setProcessSubcontractorManager(event.currentTarget.value)}
+                    />
+                  </label>
+                  <label className="text-field">
+                    <span>分包单位项目技术负责人</span>
+                    <input
+                      value={processSubcontractorTechnicalLeader}
+                      onChange={(event) => setProcessSubcontractorTechnicalLeader(event.currentTarget.value)}
+                    />
+                  </label>
+                  <label className="text-field">
+                    <span>监理项目部</span>
+                    <input
+                      value={processSupervisionDepartment}
+                      onChange={(event) => setProcessSupervisionDepartment(event.currentTarget.value)}
+                    />
+                  </label>
+                </div>
+                <div className="generation-actions">
+                  <button className="generate-button" onClick={generateProcess} disabled={selectedCodes.length === 0 || !outputDir || isGeneratingProcess}>
+                    {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
+                    生成过程资料
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />

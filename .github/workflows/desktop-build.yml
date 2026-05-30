@@ -9,7 +9,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: desktop-build-${{ github.ref }}
@@ -63,7 +63,17 @@ jobs:
         run: npm ci
 
       - name: Build Tauri bundles
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri -- build --bundles nsis
+
+      - name: Sign updater bundles
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          node -e "const fs=require('node:fs'); const path=require('node:path'); const cp=require('node:child_process'); if(!process.env.TAURI_SIGNING_PRIVATE_KEY){ console.log('Skipping updater signing because TAURI_SIGNING_PRIVATE_KEY is not set.'); process.exit(0); } function walk(dir){ return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>{ const p=path.join(dir,e.name); return e.isDirectory()?walk(p):[p]; }); } for(const file of walk('src-tauri/target').filter(f=>f.endsWith('.exe'))){ cp.execFileSync('npm',['run','tauri','--','signer','sign','-k',process.env.TAURI_SIGNING_PRIVATE_KEY,'-p',process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '',file],{stdio:'inherit'}); }"
 
       - name: Upload bundles
         uses: actions/upload-artifact@v4
@@ -71,6 +81,7 @@ jobs:
           name: Windows bundles
           path: |
             src-tauri/target/**/bundle/nsis/*.exe
+            src-tauri/target/**/bundle/nsis/*.sig
           if-no-files-found: error
 
   build-macos:
@@ -115,7 +126,17 @@ jobs:
         run: npm ci
 
       - name: Build Tauri bundles
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri -- build ${{ matrix.args }}
+
+      - name: Sign updater bundles
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          node -e "const fs=require('node:fs'); const path=require('node:path'); const cp=require('node:child_process'); if(!process.env.TAURI_SIGNING_PRIVATE_KEY){ console.log('Skipping updater signing because TAURI_SIGNING_PRIVATE_KEY is not set.'); process.exit(0); } function walk(dir){ return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>{ const p=path.join(dir,e.name); return e.isDirectory()?walk(p):[p]; }); } for(const file of walk('src-tauri/target').filter(f=>f.endsWith('.dmg'))){ cp.execFileSync('npm',['run','tauri','--','signer','sign','-k',process.env.TAURI_SIGNING_PRIVATE_KEY,'-p',process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '',file],{stdio:'inherit'}); }"
 
       - name: Upload bundles
         uses: actions/upload-artifact@v4
@@ -123,4 +144,80 @@ jobs:
           name: ${{ matrix.name }} bundles
           path: |
             src-tauri/target/**/bundle/dmg/*.dmg
+            src-tauri/target/**/bundle/dmg/*.sig
           if-no-files-found: error
+
+  publish-release:
+    name: Publish Release
+    needs:
+      - build-windows
+      - build-macos
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download bundles
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Prepare updater manifest
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const root = "release-assets";
+          const upload = "release-upload";
+          fs.mkdirSync(upload, { recursive: true });
+
+          function walk(dir) {
+            return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+              const full = path.join(dir, entry.name);
+              return entry.isDirectory() ? walk(full) : [full];
+            });
+          }
+
+          function copyPair(artifactName, platformKey, suffix, extension) {
+            const files = walk(path.join(root, artifactName));
+            const bundle = files.find((file) => file.endsWith(extension));
+            const signature = files.find((file) => file.endsWith(`${extension}.sig`) || file.endsWith(".sig"));
+            if (!bundle || !signature) {
+              throw new Error(`Missing bundle or signature for ${artifactName}`);
+            }
+
+            const parsed = path.parse(bundle);
+            const assetName = `${parsed.name}-${suffix}${parsed.ext}`;
+            const sigName = `${assetName}.sig`;
+            fs.copyFileSync(bundle, path.join(upload, assetName));
+            fs.copyFileSync(signature, path.join(upload, sigName));
+            return {
+              [platformKey]: {
+                signature: fs.readFileSync(signature, "utf8").trim(),
+                url: `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/${process.env.GITHUB_REF_NAME}/${encodeURIComponent(assetName)}`,
+              },
+            };
+          }
+
+          const platforms = {
+            ...copyPair("Windows bundles", "windows-x86_64", "windows-x86_64", ".exe"),
+            ...copyPair("macOS Apple Silicon bundles", "darwin-aarch64", "darwin-aarch64", ".dmg"),
+            ...copyPair("macOS Intel bundles", "darwin-x86_64", "darwin-x86_64", ".dmg"),
+          };
+
+          const latest = {
+            version: process.env.GITHUB_REF_NAME.replace(/^v/, ""),
+            notes: `Release ${process.env.GITHUB_REF_NAME}`,
+            pub_date: new Date().toISOString(),
+            platforms,
+          };
+          fs.writeFileSync(path.join(upload, "latest.json"), JSON.stringify(latest, null, 2));
+          NODE
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" release-upload/* --title "${GITHUB_REF_NAME}" --notes "Release ${GITHUB_REF_NAME}" --verify-tag

@@ -9,9 +9,11 @@ lerna-debug.log*
 
 node_modules
 dist
-template
+template/*
 dist-ssr
 *.local
+updater-private.key
+updater-private.key.pub
 
 # Editor directories and files
 .vscode/*

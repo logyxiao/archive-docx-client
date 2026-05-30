@@ -17,6 +17,8 @@
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "docxtemplater": "^3.68.7",
     "exceljs": "^4.4.0",
     "lucide-react": "^1.17.0",

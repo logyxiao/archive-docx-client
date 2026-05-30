@@ -23,6 +23,14 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENBMTMwMjEwQTA0QzFEQUEKUldTcUhVeWdFQUlUeWdJSThUNUVYOFhUTitHTnU2aU92OVJwNTJBRUhhZU15b1NhRlVmc2d0eGsK",
+      "endpoints": [
+        "https://github.com/logyxiao/archive-docx-client/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

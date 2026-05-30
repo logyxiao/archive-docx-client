@@ -120,6 +120,18 @@ h2 {
   gap: 10px;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.update-button {
+  min-width: 120px;
+  min-height: 38px;
+  padding: 0 12px;
+}
+
 .summary-item {
   border: 1px solid #d6dce2;
   border-radius: 8px;
@@ -414,6 +426,45 @@ h2 {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.process-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.process-field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.text-field {
+  display: grid;
+  gap: 7px;
+  color: #394855;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.text-field input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  outline: 0;
+  padding: 0 10px;
+  color: #17202a;
+  background: #fbfcfd;
+}
+
+.text-field input:focus {
+  border-color: #156b5f;
+  box-shadow: 0 0 0 3px rgba(21, 107, 95, 0.13);
 }
 
 .modal-preview-grid {
