@@ -22,8 +22,10 @@ import type { ArchiveRecord } from "./lib/types";
 
 const DEFAULT_BACKUP_NOTE = "";
 const LAST_OUTPUT_DIR_KEY = "archive-docx-client:last-output-dir";
+const ARCHIVE_DOCX_TAB = "archive-docx";
 
 function App() {
+  const [activeTab, setActiveTab] = useState(ARCHIVE_DOCX_TAB);
   const [excelPath, setExcelPath] = useState("");
   const [outputDir, setOutputDir] = useState(() => localStorage.getItem(LAST_OUTPUT_DIR_KEY) ?? "");
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
@@ -171,8 +173,8 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">DOCX Archive Builder</p>
-          <h1>档案文档生成器</h1>
+          <p className="eyebrow">Archive Workspace</p>
+          <h1>档案工具箱</h1>
         </div>
         <div className="summary-strip">
           <SummaryItem label="案卷" value={records.length} />
@@ -181,95 +183,110 @@ function App() {
         </div>
       </header>
 
-      <section className="control-band">
-        <button className="primary-button" onClick={chooseExcel} disabled={isLoading}>
-          {isLoading ? <Loader2 className="spin" size={18} /> : <FileSpreadsheet size={18} />}
-          选择 Excel
+      <nav className="app-tabs" aria-label="功能栏目">
+        <button
+          className={`tab-button ${activeTab === ARCHIVE_DOCX_TAB ? "active" : ""}`}
+          onClick={() => setActiveTab(ARCHIVE_DOCX_TAB)}
+          type="button"
+        >
+          <FileText size={17} />
+          档案文档生成器
         </button>
-        <button className="secondary-button" onClick={chooseOutputDir}>
-          <FolderOpen size={18} />
-          输出目录
-        </button>
-        <div className="path-stack">
-          <PathLine label="Excel" value={excelPath || "未选择"} />
-          <PathLine label="输出" value={outputDir || "未选择"} />
-        </div>
-      </section>
+      </nav>
 
-      <section className="workspace">
-        <aside className="record-pane">
-          <div className="pane-title">
-            <div>
-              <h2>案卷列表</h2>
-              <p>{filteredRecords.length} 条匹配记录</p>
+      {activeTab === ARCHIVE_DOCX_TAB ? (
+        <section className="tab-panel">
+          <section className="control-band">
+            <button className="primary-button" onClick={chooseExcel} disabled={isLoading}>
+              {isLoading ? <Loader2 className="spin" size={18} /> : <FileSpreadsheet size={18} />}
+              选择 Excel
+            </button>
+            <button className="secondary-button" onClick={chooseOutputDir}>
+              <FolderOpen size={18} />
+              输出目录
+            </button>
+            <div className="path-stack">
+              <PathLine label="Excel" value={excelPath || "未选择"} />
+              <PathLine label="输出" value={outputDir || "未选择"} />
             </div>
-            <label className="select-all">
-              <input
-                type="checkbox"
-                checked={filteredRecords.length > 0 && filteredRecords.every((record) => selectedCodes.includes(record.archiveCode))}
-                onChange={(event) => toggleVisibleRecords(event.currentTarget.checked)}
-              />
-              全选
-            </label>
-          </div>
-          <label className="search-box">
-            <Search size={17} />
-            <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="搜索档号、题名、单位" />
-          </label>
-          <div className="record-list">
-            {filteredRecords.map((record) => (
-              <div
-                key={record.archiveCode}
-                className={`record-row ${selectedCodes.includes(record.archiveCode) ? "selected" : ""}`}
-              >
-                <button className="record-toggle" onClick={() => toggleCode(record.archiveCode)}>
-                  <span className="checkmark">{selectedCodes.includes(record.archiveCode) ? <Check size={14} /> : null}</span>
-                  <span>
-                    <strong>{record.archiveCode}</strong>
-                    <small>{record.fullTitle}</small>
-                  </span>
-                </button>
-                <button className="icon-button" onClick={() => setPreviewRecord(record)} title="案卷详情" aria-label={`${record.archiveCode} 案卷详情`}>
-                  <Info size={17} />
-                </button>
+          </section>
+
+          <section className="workspace">
+            <aside className="record-pane">
+              <div className="pane-title">
+                <div>
+                  <h2>案卷列表</h2>
+                  <p>{filteredRecords.length} 条匹配记录</p>
+                </div>
+                <label className="select-all">
+                  <input
+                    type="checkbox"
+                    checked={filteredRecords.length > 0 && filteredRecords.every((record) => selectedCodes.includes(record.archiveCode))}
+                    onChange={(event) => toggleVisibleRecords(event.currentTarget.checked)}
+                  />
+                  全选
+                </label>
               </div>
-            ))}
-            {records.length === 0 ? <div className="empty-state">请选择 Excel 总目录</div> : null}
-          </div>
-        </aside>
+              <label className="search-box">
+                <Search size={17} />
+                <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="搜索档号、题名、单位" />
+              </label>
+              <div className="record-list">
+                {filteredRecords.map((record) => (
+                  <div
+                    key={record.archiveCode}
+                    className={`record-row ${selectedCodes.includes(record.archiveCode) ? "selected" : ""}`}
+                  >
+                    <button className="record-toggle" onClick={() => toggleCode(record.archiveCode)}>
+                      <span className="checkmark">{selectedCodes.includes(record.archiveCode) ? <Check size={14} /> : null}</span>
+                      <span>
+                        <strong>{record.archiveCode}</strong>
+                        <small>{record.fullTitle}</small>
+                      </span>
+                    </button>
+                    <button className="icon-button" onClick={() => setPreviewRecord(record)} title="案卷详情" aria-label={`${record.archiveCode} 案卷详情`}>
+                      <Info size={17} />
+                    </button>
+                  </div>
+                ))}
+                {records.length === 0 ? <div className="empty-state">请选择 Excel 总目录</div> : null}
+              </div>
+            </aside>
 
-        <section className="detail-pane">
-          <div className="tool-section">
-            <div className="section-heading">
-              <Settings2 size={19} />
-              <h2>生成设置</h2>
-            </div>
-            <div className="switch-row">
-              <Toggle checked={generateCover} onChange={setGenerateCover} label="案卷大封面" />
-              <Toggle checked={generateNote} onChange={setGenerateNote} label="备考表" />
-              <Toggle checked={generateSpine} onChange={setGenerateSpine} label="案卷脊背" />
-            </div>
-            <label className="note-field">
-              <span>备考表其它情况</span>
-              <textarea
-                value={backupNote}
-                onChange={(event) => setBackupNote(event.currentTarget.value)}
-                placeholder="不填写则生成空白说明"
-              />
-            </label>
-            <div className="generation-actions">
-              <button className="generate-button" onClick={generate} disabled={!canGenerate || isGenerating}>
-                {isGenerating ? <Loader2 className="spin" size={18} /> : <FileText size={18} />}
-                生成 DOCX
-              </button>
-              <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
-                <FolderOpen size={18} />
-                打开输出目录
-              </button>
-            </div>
-          </div>
+            <section className="detail-pane">
+              <div className="tool-section">
+                <div className="section-heading">
+                  <Settings2 size={19} />
+                  <h2>生成设置</h2>
+                </div>
+                <div className="switch-row">
+                  <Toggle checked={generateCover} onChange={setGenerateCover} label="案卷大封面" />
+                  <Toggle checked={generateNote} onChange={setGenerateNote} label="备考表" />
+                  <Toggle checked={generateSpine} onChange={setGenerateSpine} label="案卷脊背" />
+                </div>
+                <label className="note-field">
+                  <span>备考表其它情况</span>
+                  <textarea
+                    value={backupNote}
+                    onChange={(event) => setBackupNote(event.currentTarget.value)}
+                    placeholder="不填写则生成空白说明"
+                  />
+                </label>
+                <div className="generation-actions">
+                  <button className="generate-button" onClick={generate} disabled={!canGenerate || isGenerating}>
+                    {isGenerating ? <Loader2 className="spin" size={18} /> : <FileText size={18} />}
+                    生成 DOCX
+                  </button>
+                  <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
+                    <FolderOpen size={18} />
+                    打开输出目录
+                  </button>
+                </div>
+              </div>
+            </section>
+          </section>
         </section>
-      </section>
+      ) : null}
 
       {previewRecord ? (
         <div className="modal-backdrop" onClick={() => setPreviewRecord(null)}>
