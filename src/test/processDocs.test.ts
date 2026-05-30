@@ -30,7 +30,8 @@ async function workbookFrom(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
 }
 
 describe("process docs generation", () => {
-  it("matches bundled templates by source row sequence and skips rows without templates", async () => {
+  describe("template matching", () => {
+    it("matches bundled templates by source row sequence and skips rows without templates", async () => {
     stubProcessFetch();
     const paths: string[] = [];
 
@@ -67,7 +68,7 @@ describe("process docs generation", () => {
     expect(paths[0]).toContain("/过程资料/5028G01-0011-8312-001");
   });
 
-  it("skips archive records that do not match the process-doc template profile", async () => {
+    it("skips archive records that do not match the process-doc template profile", async () => {
     stubProcessFetch();
     const drawingRecord = {
       ...processRecord,
@@ -90,11 +91,13 @@ describe("process docs generation", () => {
     );
 
     expect(result.files).toEqual([]);
-    expect(result.skipped).toEqual(["5028G01-0011-813-001：不适用过程资料模板"]);
+    expect(result.skipped).toEqual(["5028G01-0011-813-001：不适用过程资料模板（未匹配过程资料关键词）"]);
     expect(result.errors).toEqual([]);
   });
+  });
 
-  it("fills docx fields from source data and clears template-only company values", async () => {
+  describe("docx rendering", () => {
+    it("fills docx fields from source data and clears template-only company values", async () => {
     const item = processRecord.items[0];
     const template = readPublic("/templates/process-docs/template-001.docx");
     const xml = await docxXml(renderProcessDocx(template, processRecord, item, { supervisionDepartment: "测试监理项目部" }));
@@ -104,8 +107,10 @@ describe("process docs generation", () => {
     expect(xml).toContain("测试监理项目部");
     expect(xml).not.toContain("河南中核五院研究设计有限公司");
   });
+  });
 
-  it("fills xlsx source fields and clears source-missing fields", async () => {
+  describe("xlsx rendering", () => {
+    it("fills xlsx source fields and clears source-missing fields", async () => {
     const item = processRecord.items[4];
     const template = readPublic("/templates/process-docs/template-008.xlsx");
     const workbook = await workbookFrom(
@@ -134,7 +139,7 @@ describe("process docs generation", () => {
     expect(sheet.getCell("B5").isMerged).toBe(true);
   });
 
-  it("leaves optional process fields blank when users do not fill them", async () => {
+    it("leaves optional process fields blank when users do not fill them", async () => {
     const item = processRecord.items[4];
     const template = readPublic("/templates/process-docs/template-008.xlsx");
     const workbook = await workbookFrom(await renderProcessWorkbook(template, processRecord, item));
@@ -148,7 +153,22 @@ describe("process docs generation", () => {
     expect(sheet.getCell("T8").value).toBe("");
   });
 
-  it("reuses construction technical leader for professional foreman fields", async () => {
+    it("treats blank user fields as not filled", async () => {
+    const item = processRecord.items[4];
+    const template = readPublic("/templates/process-docs/template-008.xlsx");
+    const workbook = await workbookFrom(
+      await renderProcessWorkbook(template, processRecord, item, {
+        generalContractorUnit: "",
+        constructionUnit: "   ",
+      }),
+    );
+    const sheet = workbook.worksheets[0];
+
+    expect(sheet.getCell("G6").value).toBe(item.owner);
+    expect(sheet.getCell("G7").value).toBe(item.owner);
+  });
+
+    it("reuses construction technical leader for professional foreman fields", async () => {
     const item = processRecord.items[35];
     const template = readPublic("/templates/process-docs/template-037.xlsx");
     const workbook = await workbookFrom(
@@ -161,7 +181,35 @@ describe("process docs generation", () => {
     expect(sheet.getCell("AE11").value).toBe("施工技术负责人");
   });
 
-  it("keeps summary workbook header merge and style intact", async () => {
+    it("fills numeric self-check values within quality standard ranges", async () => {
+    const item = processRecord.items[43];
+    const template = readPublic("/templates/process-docs/template-061.xlsx");
+    const workbook = await workbookFrom(await renderProcessWorkbook(template, processRecord, item));
+    const sheet = workbook.worksheets[0];
+    const values = ["V14", "W14", "X14", "Y14", "Z14", "AA14", "AB14", "AC14", "AD14", "AE14"]
+      .map((address) => Number(sheet.getCell(address).value));
+
+    expect(values.every((value) => Number.isFinite(value))).toBe(true);
+    expect(values.every((value) => value >= -2 && value <= 2)).toBe(true);
+  });
+
+    it("fills merged quality result values when templates use quality acceptance result columns", async () => {
+    const item = processRecord.items[4];
+    const template = readPublic("/templates/process-docs/template-008.xlsx");
+    const workbook = await workbookFrom(await renderProcessWorkbook(template, processRecord, item));
+    const sheet = workbook.worksheets[0];
+    const values = String(sheet.getCell("V21").value)
+      .split(",")
+      .map((value) => Number(value));
+
+    expect(values).toHaveLength(10);
+    expect(values.every((value) => Number.isFinite(value))).toBe(true);
+    expect(values.every((value) => value >= 0 && value <= 2)).toBe(true);
+  });
+  });
+
+  describe("summary workbook rendering", () => {
+    it("keeps summary workbook header merge and style intact", async () => {
     const summaryTemplates = [
       "/templates/process-docs/template-002.xlsx",
       "/templates/process-docs/template-006.xlsx",
@@ -196,6 +244,7 @@ describe("process docs generation", () => {
       expect(rendered.worksheets[0].getCell("U7").value).toBe("总包负责人");
       expect(rendered.worksheets[0].getCell("AF8").value).toBe("施工技术负责人");
     }
+  });
   });
 });
 
