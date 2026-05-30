@@ -1,15 +1,15 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { excelSerialToDate, inferDrawingPages, inferTextPages, parseArchiveWorkbook } from "../lib/excel";
+import { createArchiveWorkbookFixture } from "./fixtures";
 
-const workbookBytes = readFileSync("../预立卷档案总目录（高明）(5).xlsx");
+const workbookBytes = createArchiveWorkbookFixture();
 
 describe("parseArchiveWorkbook", () => {
   it("groups rows by archive code and derives archive fields", () => {
     const records = parseArchiveWorkbook(workbookBytes);
     const record = records.find((item) => item.archiveCode === "5028G01-0011-842-001");
 
-    expect(records.length).toBeGreaterThan(20);
+    expect(records.length).toBeGreaterThanOrEqual(2);
     expect(record).toBeDefined();
     expect(record?.fullTitle).toBe("中核汇能高明创楷3.58904MWp分布式光伏项目 二次设备试验");
     expect(record?.projectName).toBe("中核汇能高明创楷3.58904MWp分布式光伏项目");

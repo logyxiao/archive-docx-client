@@ -14,8 +14,9 @@ import {
   spineFileName,
 } from "../lib/docx";
 import { parseArchiveWorkbook } from "../lib/excel";
+import { createArchiveWorkbookFixture } from "./fixtures";
 
-const records = parseArchiveWorkbook(readFileSync("../预立卷档案总目录（高明）(5).xlsx"));
+const records = parseArchiveWorkbook(createArchiveWorkbookFixture());
 const record = records.find((item) => item.archiveCode === "5028G01-0011-842-001")!;
 const largeRecord = records.find((item) => item.archiveCode === "5028G01-0011-941-001")!;
 
