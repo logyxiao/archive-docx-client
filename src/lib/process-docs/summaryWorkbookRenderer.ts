@@ -1,6 +1,7 @@
 import PizZip from "pizzip";
 import type { ArchiveItem, ArchiveRecord } from "../types";
 import { resolveProcessFields } from "./fields";
+import { subunitProjectName } from "./textReplacement";
 import type { ProcessUserFields } from "./types";
 import { archiveProjectCode, escapeRegExp, escapeXml } from "./utils";
 
@@ -21,6 +22,7 @@ export function renderSummaryWorkbook(
   xml = setInlineStringCell(xml, "F4", archiveProjectCode(record.archiveCode));
   if (item) {
     xml = fillSubunitQualityWorkbook(xml, record, item);
+    xml = preserveSubunitQualityPrintLayout(xml);
   }
   xml = setInlineStringCell(xml, "G7", fields.generalContractorUnit);
   xml = setInlineStringCell(xml, "U7", fields.generalContractorProjectManager);
@@ -33,6 +35,9 @@ export function renderSummaryWorkbook(
   xml = setInlineStringCell(xml, "AF9", fields.subcontractorContent);
 
   zip.file("xl/worksheets/sheet1.xml", xml);
+  if (item) {
+    preserveSubunitQualityWorkbookPrintArea(zip);
+  }
   return zip.generate({ type: "uint8array", compression: "DEFLATE" });
 }
 
@@ -60,6 +65,59 @@ function fillSubunitQualityWorkbook(xml: string, record: ArchiveRecord, item: Ar
   return nextXml;
 }
 
+function preserveSubunitQualityPrintLayout(xml: string): string {
+  let nextXml = xml.replace(
+    /<pageSetUpPr(?:\s[^>]*)?\/>/,
+    '<pageSetUpPr fitToPage="1"/>',
+  );
+
+  if (!/<pageSetUpPr\b/.test(nextXml)) {
+    nextXml = nextXml.replace(/<sheetPr>/, '<sheetPr><pageSetUpPr fitToPage="1"/>');
+  }
+
+  nextXml = upsertSelfClosingElement(
+    nextXml,
+    "pageMargins",
+    '<pageMargins left="0.7874015748031497" right="0" top="0.5905511811023622" bottom="0" header="0.51181" footer="0.51181"/>',
+    "</worksheet>",
+  );
+  nextXml = upsertSelfClosingElement(
+    nextXml,
+    "pageSetup",
+    '<pageSetup paperSize="9" scale="95" orientation="landscape" fitToWidth="1" fitToHeight="2" horizontalDpi="600" verticalDpi="600" copies="1"/>',
+    "</worksheet>",
+  );
+  return nextXml;
+}
+
+function preserveSubunitQualityWorkbookPrintArea(zip: PizZip) {
+  const workbook = zip.file("xl/workbook.xml");
+  if (!workbook) {
+    return;
+  }
+
+  const workbookXml = workbook.asText();
+  const printArea = '<definedName name="_xlnm.Print_Area" localSheetId="0">光伏方阵安装!$A$1:$AL$30</definedName>';
+  const nextWorkbookXml = workbookXml.includes("_xlnm.Print_Area")
+    ? workbookXml.replace(/<definedName name="_xlnm\.Print_Area"[^>]*>[\s\S]*?<\/definedName>/, printArea)
+    : workbookXml.replace(/<definedNames\/>|<definedNames><\/definedNames>/, `<definedNames>${printArea}</definedNames>`);
+
+  zip.file("xl/workbook.xml", nextWorkbookXml);
+}
+
+function upsertSelfClosingElement(xml: string, tagName: string, elementXml: string, insertBefore: string): string {
+  const existing = new RegExp(`<${tagName}\\b[^>]*/>`);
+  if (existing.test(xml)) {
+    return xml.replace(existing, elementXml);
+  }
+
+  const insertIndex = xml.indexOf(insertBefore);
+  if (insertIndex === -1) {
+    return xml;
+  }
+  return `${xml.slice(0, insertIndex)}${elementXml}${xml.slice(insertIndex)}`;
+}
+
 function subunitQualitySummary(record: ArchiveRecord, item: ArchiveItem): {
   subunitProjectName: string;
   unitProjectName: string;
@@ -74,14 +132,6 @@ function subunitQualitySummary(record: ArchiveRecord, item: ArchiveItem): {
       { name: "主体工程", count: 2 },
     ],
   };
-}
-
-function subunitProjectName(title: string): string {
-  return title
-    .replace(/^\s*\d+[、.．\-\s]*/, "")
-    .replace(/^.*?项目\s*/, "")
-    .replace(/\s*质量(?:报验申请|报审表)及验收记录\s*$/, "")
-    .trim();
 }
 
 function unitProjectName(record: ArchiveRecord): string {

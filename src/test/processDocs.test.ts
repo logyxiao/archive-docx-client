@@ -19,7 +19,10 @@ function stubProcessFetch() {
 }
 
 function fileNames(paths: string[]): string[] {
-  return paths.map((path) => path.split("/").at(-1) ?? path);
+  return paths.map((path) => {
+    const parts = path.split("/");
+    return parts[parts.length - 1] || path;
+  });
 }
 
 async function docxXml(bytes: Uint8Array): Promise<string> {
@@ -31,6 +34,11 @@ async function workbookFrom(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(Buffer.from(bytes));
   return workbook;
+}
+
+async function xlsxXml(bytes: Uint8Array, path: string): Promise<string> {
+  const zip = await JSZip.loadAsync(bytes);
+  return zip.file(path)!.async("string");
 }
 
 describe("process docs generation", () => {
@@ -62,10 +70,11 @@ describe("process docs generation", () => {
         },
       );
 
-      expect(result.files).toHaveLength(5);
-      expect(paths).toHaveLength(5);
+      expect(result.files).toHaveLength(6);
+      expect(paths).toHaveLength(6);
       expect(fileNames(paths).filter((name) => name.includes("开工报审"))).toHaveLength(4);
       expect(fileNames(paths).filter((name) => name.includes("子单位工程质量验收记录"))).toHaveLength(1);
+      expect(fileNames(paths).filter((name) => name.includes("子单位工程报验申请单"))).toHaveLength(1);
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
       expect(paths[0]).toContain("/过程资料/5028G01-0011-8312-001");
@@ -160,6 +169,8 @@ describe("process docs generation", () => {
       );
       const workbook = await workbookFrom(written[0]);
       const sheet = workbook.worksheets[0];
+      const sheetXml = await xlsxXml(written[0], "xl/worksheets/sheet1.xml");
+      const workbookXml = await xlsxXml(written[0], "xl/workbook.xml");
 
       expect(result.files).toHaveLength(1);
       expect(paths[0]).toContain("子单位工程质量验收记录");
@@ -176,6 +187,20 @@ describe("process docs generation", () => {
       expect(sheet.getCell("J13").value).toBe("2");
       expect(sheet.getCell("V11").value).toBe("自检检查符合规范及设计要求");
       expect(sheet.getCell("AD11").value).toBeNull();
+      expect(sheet.pageSetup.fitToPage).toBe(true);
+      expect(sheet.pageSetup.fitToWidth).toBe(1);
+      expect(sheet.pageSetup.fitToHeight).toBe(2);
+      expect(sheet.pageSetup.orientation).toBe("landscape");
+      expect(sheet.pageSetup.paperSize).toBe(9);
+      expect(sheet.pageSetup.scale).toBe(95);
+      expect(sheet.pageSetup.margins).toMatchObject({
+        left: 0.7874015748031497,
+        right: 0,
+        top: 0.5905511811023622,
+        bottom: 0,
+      });
+      expect(sheetXml.indexOf("<pageMargins")).toBeLessThan(sheetXml.indexOf("<pageSetup"));
+      expect(workbookXml).toContain('<definedName name="_xlnm.Print_Area" localSheetId="0">光伏方阵安装!$A$1:$AL$30</definedName>');
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
     });
@@ -210,6 +235,58 @@ describe("process docs generation", () => {
 
       expect(result.files).toHaveLength(1);
       expect(workbook.worksheets[0].getCell("I2").value).toBe("光伏变电系统子单位工程");
+      expect(result.skipped).toEqual([]);
+      expect(result.errors).toEqual([]);
+    });
+
+    it("uses the shared subunit inspection application template when selected", async () => {
+      stubProcessFetch();
+      const subunitRecord: ArchiveRecord = {
+        ...processRecord,
+        items: [
+          {
+            ...processRecord.items[1],
+            sequence: "2",
+            fileCode: "5028G01-SG-ZHHC-02-001",
+            title: "高明分布式项目 并网点光伏变电系统子单位工程质量报审表及验收记录",
+            fileDate: "20250530",
+          },
+        ],
+      };
+      const written: Uint8Array[] = [];
+      const paths: string[] = [];
+
+      const result = await generateProcessDocs(
+        [subunitRecord],
+        {
+          selectedCodes: [subunitRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          selectedTemplateCategories: ["subunit-inspection-application"],
+          userFields: {
+            projectName: "测试工程名称",
+            supervisionDepartment: "测试监理项目部",
+            constructionProjectManager: "测试项目经理",
+          },
+        },
+        async (path, bytes) => {
+          paths.push(path);
+          written.push(bytes);
+        },
+      );
+      const xml = await docxXml(written[0]);
+
+      expect(result.files).toHaveLength(1);
+      expect(fileNames(paths)[0]).toBe("2、5028G01-SG-ZHHC-02-001并网点光伏变电系统子单位工程报验申请单.docx");
+      expect(xml).toContain("工程名称：测试工程名称");
+      expect(xml).toContain("编号：5028G01-SG-ZHHC-02-001");
+      expect(xml).toContain("测试监理项目部");
+      expect(xml).toContain("工程现已施工完毕");
+      expect(xml).toContain("<w:t>子单位工程</w:t>");
+      expect(xml).toContain("<w:t>质量验收记录</w:t>");
+      expect(xml).not.toContain("项目经理：测试项目经理");
+      expect(xml).not.toContain("日    期：2025年 5 月 30 日");
+      expect(xml).toContain("<w:u w:val=\"single\"/></w:rPr><w:t xml:space=\"preserve\">        并网点光伏变电系统        </w:t>");
+      expect(xml).toContain("<w:u w:val=\"single\"/></w:rPr><w:t xml:space=\"preserve\">     并网点光伏变电系统     </w:t>");
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
     });
@@ -274,7 +351,7 @@ describe("process docs generation", () => {
       expect(paths).toHaveLength(5);
       expect(paths.some((path) => path.includes("开工报审"))).toBe(true);
       expect(paths.some((path) => path.includes("子单位工程质量验收记录"))).toBe(true);
-      expect(paths.some((path) => path.includes("报验申请"))).toBe(false);
+      expect(paths.some((path) => path.includes("子单位工程报验申请单"))).toBe(false);
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
     });

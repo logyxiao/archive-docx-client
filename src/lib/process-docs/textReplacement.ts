@@ -40,6 +40,19 @@ export function startReportScope(projectName: string, title: string): string {
   return suffix ? `${projectName} ${suffix}` : "";
 }
 
+export function subunitProjectName(title: string): string {
+  return title
+    .replace(/^\s*\d+[、.．\-\s]*/, "")
+    .replace(/^.*?项目\s*/, "")
+    .replace(/\s*质量(?:报验申请|报审表)及验收记录\s*$/, "")
+    .replace(/[，,。；;：:\s]+$/g, "")
+    .trim();
+}
+
+export function subunitInspectionSubject(title: string): string {
+  return subunitProjectName(title).replace(/\s*子单位工程\s*$/, "").trim();
+}
+
 export function replaceStartReportScopeText(text: string, projectName: string, title: string): string {
   const scope = startReportScope(projectName, title);
   if (!scope) {

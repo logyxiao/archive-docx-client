@@ -30,6 +30,11 @@ export function findSubunitQualityTemplate(templates: ProcessTemplate[]): Proces
     ?? templates.find((template) => template.kind === "xlsx" && template.originalName.includes("子单位工程质量验收记录"));
 }
 
+export function findSubunitInspectionApplicationTemplate(templates: ProcessTemplate[]): ProcessTemplate | undefined {
+  return templates.find((template) => template.templateFile === "子单位工程报验申请单.docx")
+    ?? templates.find((template) => template.kind === "docx" && template.originalName.includes("子单位工程报验申请单"));
+}
+
 export function isStartReportItemTitle(title: string): boolean {
   return /开工报审表?|开工报审/.test(title);
 }
@@ -53,4 +58,8 @@ export function isSummaryWorkbookTemplate(template: ProcessTemplate): boolean {
 
 export function isSubunitQualityTemplate(template: ProcessTemplate): boolean {
   return template.templateFile === "子单位工程质量验收记录.xlsx";
+}
+
+export function isSubunitInspectionApplicationTemplate(template: ProcessTemplate): boolean {
+  return template.templateFile === "子单位工程报验申请单.docx";
 }

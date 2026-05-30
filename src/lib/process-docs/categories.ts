@@ -2,6 +2,7 @@ import type { ProcessTemplate } from "./types";
 
 export const PROCESS_TEMPLATE_CATEGORY_IDS = [
   "start-report",
+  "subunit-inspection-application",
   "summary-quality-acceptance",
   "inspection-application",
   "quality-acceptance",
@@ -19,6 +20,7 @@ export interface ProcessTemplateCategoryOption {
 
 export const PROCESS_TEMPLATE_CATEGORIES: ProcessTemplateCategoryOption[] = [
   { id: "start-report", label: "开工报审" },
+  { id: "subunit-inspection-application", label: "子单位工程报验申请单" },
   { id: "summary-quality-acceptance", label: "子单位工程质量验收记录" },
   { id: "inspection-application", label: "报验申请单" },
   { id: "quality-acceptance", label: "分项/分部质量验收" },
@@ -40,6 +42,10 @@ export function getProcessTemplateCategory(template: ProcessTemplate): ProcessTe
 
   if (name.includes("开工报审")) {
     return "start-report";
+  }
+
+  if (template.templateFile === "子单位工程报验申请单.docx") {
+    return "subunit-inspection-application";
   }
 
   if (template.templateFile === "子单位工程质量验收记录.xlsx") {
