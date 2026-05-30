@@ -34,6 +34,12 @@ describe("renderCatalogWorkbook", () => {
     expect(detail?.getCell("E4").value).toBe("20250412");
     expect(detail?.getCell("F14").value).toBe("11");
     expect(detail?.getCell("A15").value).toBe("");
+    expect(detail?.getRow(4).height).toBe(44);
+    expect(detail?.getRow(17).height).toBe(44);
+    expect(detail?.pageSetup.fitToPage).toBe(true);
+    expect(detail?.pageSetup.fitToHeight).toBe(1);
+    expect(detail?.pageSetup.fitToWidth).toBe(1);
+    expect(detail?.pageSetup.printArea).toBe("A1:G17");
   });
 
   it("splits long detail lists into continuation sheets", async () => {

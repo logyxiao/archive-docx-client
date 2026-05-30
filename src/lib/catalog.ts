@@ -7,6 +7,8 @@ const CATALOG_TEMPLATE_PATH = "/templates/catalog.xlsx";
 const CATALOG_DATA_START_ROW = 3;
 const DETAIL_DATA_START_ROW = 4;
 const DETAIL_ROWS_PER_SHEET = 14;
+const DETAIL_LAST_PRINT_ROW = DETAIL_DATA_START_ROW + DETAIL_ROWS_PER_SHEET - 1;
+const DETAIL_DATA_ROW_HEIGHT = 44;
 const CATALOG_COLUMNS = 7;
 
 interface CatalogGenerationOptions {
@@ -112,6 +114,7 @@ function fillDetailSheet(
     const rowNumber = DETAIL_DATA_START_ROW + offset;
     const item = items[offset];
     copyRowStyle(template, sheet, rowNumber, rowNumber, CATALOG_COLUMNS);
+    sheet.getRow(rowNumber).height = DETAIL_DATA_ROW_HEIGHT;
     const sequence = groupIndex * DETAIL_ROWS_PER_SHEET + offset + 1;
     const values = item && hasMeaningfulItem(item)
       ? [
@@ -128,6 +131,11 @@ function fillDetailSheet(
   }
 
   sheet.pageSetup.printTitlesRow = "1:3";
+  sheet.pageSetup.fitToPage = true;
+  sheet.pageSetup.fitToWidth = 1;
+  sheet.pageSetup.fitToHeight = 1;
+  sheet.pageSetup.scale = undefined;
+  sheet.pageSetup.printArea = `A1:G${DETAIL_LAST_PRINT_ROW}`;
 }
 
 function applyWorksheetTemplate(source: ExcelJS.Worksheet, target: ExcelJS.Worksheet) {
