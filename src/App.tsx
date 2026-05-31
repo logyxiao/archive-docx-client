@@ -117,6 +117,22 @@ function App() {
   const savedProcessTemplateCategories = useMemo(loadSavedProcessTemplateCategories, []);
   const [excelPath, setExcelPath] = useState("");
   const [outputDir, setOutputDir] = useState(() => localStorage.getItem(LAST_OUTPUT_DIR_KEY) ?? "");
+  const actualOutputDir = useMemo(() => {
+    if (!outputDir) {
+      return "";
+    }
+    if (!excelPath) {
+      return outputDir;
+    }
+    const base = excelPath.split(/[\\/]/).pop() || "";
+    const lastDot = base.lastIndexOf(".");
+    const excelName = lastDot > 0 ? base.slice(0, lastDot) : base;
+    if (!excelName) {
+      return outputDir;
+    }
+    const separator = outputDir.includes("\\") ? "\\" : "/";
+    return `${outputDir.replace(/[\\/]+$/, "")}${separator}${excelName}`;
+  }, [outputDir, excelPath]);
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
   const [previewRecord, setPreviewRecord] = useState<ArchiveRecord | null>(null);
@@ -161,9 +177,9 @@ function App() {
   }, [query, records]);
 
   const shouldGenerateDocx = generateCover || generateNote || generateSpine;
-  const canGenerate = selectedCodes.length > 0 && outputDir && (shouldGenerateDocx || generateCatalogWorkbook);
+  const canGenerate = selectedCodes.length > 0 && actualOutputDir && (shouldGenerateDocx || generateCatalogWorkbook);
   const canGenerateProcess =
-    selectedCodes.length > 0 && Boolean(outputDir) && selectedProcessTemplateCategories.length > 0 && !isGeneratingProcess;
+    selectedCodes.length > 0 && Boolean(actualOutputDir) && selectedProcessTemplateCategories.length > 0 && !isGeneratingProcess;
   const previewIndex = previewRecord
     ? filteredRecords.findIndex((record) => record.archiveCode === previewRecord.archiveCode)
     : -1;
@@ -235,13 +251,23 @@ function App() {
   }
 
   async function openOutputDir() {
-    if (!outputDir) {
+    const targetDir = actualOutputDir || outputDir;
+    if (!targetDir) {
       return;
     }
 
     try {
-      await openPath(outputDir);
+      await openPath(targetDir);
     } catch (error) {
+      if (targetDir !== outputDir) {
+        try {
+          await openPath(outputDir);
+          return;
+        } catch (innerError) {
+          await showOperationError(innerError);
+          return;
+        }
+      }
       await showOperationError(error);
     }
   }
@@ -333,7 +359,7 @@ function App() {
           {
             selectedCodes,
             backupNote,
-            outputDir,
+            outputDir: actualOutputDir,
             generateCover,
             generateNote,
             generateSpine,
@@ -349,7 +375,7 @@ function App() {
           records,
           {
             selectedCodes,
-            outputDir,
+            outputDir: actualOutputDir,
           },
           writeBinaryFile,
         );
@@ -386,7 +412,7 @@ function App() {
         records,
         {
           selectedCodes,
-          outputDir,
+          outputDir: actualOutputDir,
           selectedTemplateCategories: selectedProcessTemplateCategories,
           userFields: {
             projectName: processProjectName.trim(),
@@ -429,7 +455,7 @@ function App() {
       </button>
       <div className="path-stack">
         <PathLine label="Excel" value={excelPath || "未选择"} />
-        <PathLine label="输出" value={outputDir || "未选择"} />
+        <PathLine label="输出" value={actualOutputDir || outputDir || "未选择"} />
       </div>
     </section>
   );

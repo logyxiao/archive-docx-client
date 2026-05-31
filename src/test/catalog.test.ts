@@ -27,7 +27,8 @@ describe("renderCatalogWorkbook", () => {
     expect(catalog.getCell("D3").value).toBe(record.totalPages);
     expect(catalog.getCell("E3").value).toBe(record.retentionPeriod);
     expect(catalog.getCell("F3").value).toBe(record.filingUnit);
-    expect(catalog.getCell("B4").value).toBe("");
+    expect(catalog.pageSetup.printArea).toBe("A1:G3");
+    expect(catalog.getCell("B4").value).toBeNull();
     expect(detail?.getCell("A2").value).toBe(` 档号：${record.archiveCode}`);
     expect(detail?.getCell("F3").value).toBe("页号");
     expect(detail?.getCell("D4").value).toBe(record.items[0].title);
@@ -54,6 +55,19 @@ describe("renderCatalogWorkbook", () => {
     expect(second?.getCell("A4").value).toBe("15");
     expect(second?.getCell("D5").value).toBe("光伏发电系统验收文件16");
     expect(second?.getCell("A6").value).toBe("");
+  });
+
+  it("limits archive catalog print area to actual records", async () => {
+    const manyRecords = Array.from({ length: 32 }, (_, index) => ({
+      ...records[0],
+      archiveCode: `5028G02-0011-${String(index + 1).padStart(3, "0")}`,
+    }));
+    const workbook = await readWorkbook(await renderCatalogWorkbook(template, manyRecords));
+    const catalog = workbook.worksheets[0];
+
+    expect(catalog.pageSetup.printArea).toBe("A1:G34");
+    expect(catalog.getCell("A34").value).toBe(32);
+    expect(catalog.getCell("A35").value).toBeNull();
   });
 
   it("uses page-count heading when detail rows are marked as page counts", async () => {

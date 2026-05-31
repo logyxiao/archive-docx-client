@@ -77,7 +77,7 @@ export async function renderCatalogWorkbook(template: ArrayBuffer | Uint8Array, 
 
 function fillCatalogSheet(sheet: ExcelJS.Worksheet, template: ExcelJS.Worksheet, records: ArchiveRecord[]) {
   copyStaticRows(template, sheet, 1, 2);
-  const rowCount = Math.max(template.rowCount, CATALOG_DATA_START_ROW + records.length - 1);
+  const rowCount = Math.max(CATALOG_DATA_START_ROW, CATALOG_DATA_START_ROW + records.length - 1);
 
   for (let rowNumber = CATALOG_DATA_START_ROW; rowNumber <= rowCount; rowNumber += 1) {
     copyRowStyle(template, sheet, CATALOG_DATA_START_ROW, rowNumber, CATALOG_COLUMNS);
@@ -97,6 +97,7 @@ function fillCatalogSheet(sheet: ExcelJS.Worksheet, template: ExcelJS.Worksheet,
   }
 
   sheet.pageSetup.printTitlesRow = "1:2";
+  sheet.pageSetup.printArea = `A1:G${rowCount}`;
 }
 
 function fillDetailSheet(
