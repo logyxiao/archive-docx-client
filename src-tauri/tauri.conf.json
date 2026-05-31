@@ -25,7 +25,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENBMTMwMjEwQTA0QzFEQUEKUldTcUhVeWdFQUlUeWdJSThUNUVYOFhUTitHTnU2aU92OVJwNTJBRUhhZU15b1NhRlVmc2d0eGsK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQwOTgzNUEyNEYwQkE0NjEKUldSaHBBdFBvaldZUU9CYWhVSzdRbDB1T3c0Y2xiTUNZbW5ITWwvcWQrdG1IN1h5VUFVZGhVYk8K",
       "endpoints": [
         "https://github.com/logyxiao/archive-docx-client/releases/latest/download/latest.json"
       ]
