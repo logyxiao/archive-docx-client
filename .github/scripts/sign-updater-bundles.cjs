@@ -52,12 +52,21 @@ if (bundles.length === 0) {
   throw new Error(`No ${extension} bundles found under src-tauri/target/**/bundle.`);
 }
 
-const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+const tauriCli = path.join(path.dirname(require.resolve("@tauri-apps/cli")), "tauri.js");
 for (const bundle of bundles) {
   const output = cp.execFileSync(
-    npx,
-    ["--no-install", "tauri", "signer", "sign", "-k", privateKey, "-p", password, bundle],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
+    process.execPath,
+    [tauriCli, "signer", "sign", bundle],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        TAURI_SIGNING_PRIVATE_KEY: privateKey,
+        TAURI_SIGNING_PRIVATE_KEY_PASSWORD: password,
+      },
+      stdio: ["ignore", "pipe", "inherit"],
+      windowsHide: true,
+    },
   );
   const signature = parseSignature(output);
   if (!signature) {
