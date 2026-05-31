@@ -73,8 +73,9 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          REQUIRE_UPDATER_SIGNATURES: "true"
         run: |
-          node -e "const fs=require('node:fs'); const path=require('node:path'); const cp=require('node:child_process'); if(!process.env.TAURI_SIGNING_PRIVATE_KEY){ console.log('Skipping updater signing because TAURI_SIGNING_PRIVATE_KEY is not set.'); process.exit(0); } function walk(dir){ return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>{ const p=path.join(dir,e.name); return e.isDirectory()?walk(p):[p]; }); } for(const file of walk('src-tauri/target').filter(f=>f.endsWith('.exe'))){ cp.execFileSync('npm',['run','tauri','--','signer','sign','-k',process.env.TAURI_SIGNING_PRIVATE_KEY,'-p',process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '',file],{stdio:'inherit'}); }"
+          node .github/scripts/sign-updater-bundles.cjs .exe
 
       - name: Upload bundles
         uses: actions/upload-artifact@v4
@@ -136,8 +137,9 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          REQUIRE_UPDATER_SIGNATURES: "true"
         run: |
-          node -e "const fs=require('node:fs'); const path=require('node:path'); const cp=require('node:child_process'); if(!process.env.TAURI_SIGNING_PRIVATE_KEY){ console.log('Skipping updater signing because TAURI_SIGNING_PRIVATE_KEY is not set.'); process.exit(0); } function walk(dir){ return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>{ const p=path.join(dir,e.name); return e.isDirectory()?walk(p):[p]; }); } for(const file of walk('src-tauri/target').filter(f=>f.endsWith('.dmg'))){ cp.execFileSync('npm',['run','tauri','--','signer','sign','-k',process.env.TAURI_SIGNING_PRIVATE_KEY,'-p',process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '',file],{stdio:'inherit'}); }"
+          node .github/scripts/sign-updater-bundles.cjs .dmg
 
       - name: Upload bundles
         uses: actions/upload-artifact@v4
@@ -182,11 +184,12 @@ jobs:
           }
 
           function copyPair(artifactName, platformKey, suffix, extension) {
-            const files = walk(path.join(root, artifactName));
+            const artifactDir = path.join(root, artifactName);
+            const files = walk(artifactDir);
             const bundle = files.find((file) => file.endsWith(extension));
             const signature = files.find((file) => file.endsWith(`${extension}.sig`) || file.endsWith(".sig"));
             if (!bundle || !signature) {
-              throw new Error(`Missing bundle or signature for ${artifactName}`);
+              throw new Error(`Missing bundle or signature for ${artifactName}. Found files:\n${files.join("\n") || "(none)"}`);
             }
 
             const parsed = path.parse(bundle);
