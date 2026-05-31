@@ -6,7 +6,8 @@ import { sanitizeFileName } from "./utils";
 export function processOutputName(template: ProcessTemplate, item: ArchiveItem): string {
   const extension = template.outputExtension;
   const sequence = item.sequence || String(template.sequence);
-  const fileCode = item.fileCode && item.fileCode !== "/" ? item.fileCode : "";
+  const code = template.outputFileCodeOverride ?? item.fileCode;
+  const fileCode = code && code !== "/" ? code : "";
   const title = outputTitle(template, item.title);
 
   return sanitizeFileName(`${sequence}、${fileCode}${title}${extension}`);

@@ -3,8 +3,12 @@ import PizZip from "pizzip";
 import type { ArchiveItem, ArchiveRecord } from "../types";
 import { PRESERVED_USER_FIELD_LABELS, SOURCE_MISSING_LABELS } from "./constants";
 import { resolveProcessFields } from "./fields";
+import {
+  isSwitchStationArchiveRecord,
+  switchStationInspectionLotContext,
+} from "./switchStation";
 import { inspectionApplicationFullSubject, replaceBusinessText, stripProjectPrefix } from "./textReplacement";
-import type { ProcessUserFields, ResolvedProcessFields } from "./types";
+import type { ProcessTemplateModule, ProcessUserFields, ResolvedProcessFields } from "./types";
 import { archiveProjectCode, formatChineseDate, toArrayBuffer } from "./utils";
 import { clearAfterLabel, fillAfterLabel, fillAfterLabelExcept, fillOrClearAfterLabelInRow, isMergedSlave, rowHasExactLabel } from "./workbookCells";
 import { fillRandomSelfCheckValues } from "./qualitySelfCheck";
@@ -14,21 +18,29 @@ export async function renderProcessWorkbook(
   record: ArchiveRecord,
   item: ArchiveItem,
   userFields: ProcessUserFields = {},
+  templateModule: ProcessTemplateModule = "process",
 ): Promise<Uint8Array> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(toArrayBuffer(template));
 
   for (const sheet of workbook.worksheets) {
-    applyWorkbookValues(sheet, record, item, userFields);
+    applyWorkbookValues(sheet, record, item, userFields, templateModule);
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
   return preserveProcessWorkbookPrintLayout(new Uint8Array(buffer), template);
 }
 
-function applyWorkbookValues(sheet: ExcelJS.Worksheet, record: ArchiveRecord, item: ArchiveItem, userFields: ProcessUserFields) {
+function applyWorkbookValues(
+  sheet: ExcelJS.Worksheet,
+  record: ArchiveRecord,
+  item: ArchiveItem,
+  userFields: ProcessUserFields,
+  templateModule: ProcessTemplateModule,
+) {
   const fields = resolveProcessFields(userFields, item.owner || record.filingUnit);
   const projectName = userFields.projectName?.trim() || record.projectName;
+  const isSwitchStation = templateModule === "switch-station" || isSwitchStationArchiveRecord(record);
   for (const row of sheet.getRows(1, sheet.rowCount) ?? []) {
     row.eachCell({ includeEmpty: true }, (cell) => {
       if (isMergedSlave(cell)) {
@@ -40,11 +52,13 @@ function applyWorkbookValues(sheet: ExcelJS.Worksheet, record: ArchiveRecord, it
     });
   }
 
-  fillAfterLabelExcept(sheet, ["工程名称", "工程项目名称"], ["单位（子单位）工程名称", "分部（子分部）工程名称", "分项工程名称"], projectName);
+  if (!shouldSkipProjectNameAutoFill(item, isSwitchStation)) {
+    fillAfterLabelExcept(sheet, ["工程名称", "工程项目名称"], ["单位（子单位）工程名称", "分部（子分部）工程名称", "分项工程名称"], projectName);
+  }
   fillAfterLabel(sheet, ["工程编号"], archiveProjectCode(record.archiveCode));
   fillAfterLabel(sheet, ["抽样单位"], item.owner || record.filingUnit);
   fillAfterLabel(sheet, ["抽样日期"], formatChineseDate(item.fileDate));
-  fillInspectionLotProjectNames(sheet, record, item);
+  fillInspectionLotProjectNames(sheet, record, item, isSwitchStation);
   fillUnitScopedFields(sheet, fields);
   fillOrClearProfessionalForeman(sheet, fields.constructionTechnicalLeader);
   fillRandomSelfCheckValues(sheet);
@@ -54,15 +68,22 @@ function applyWorkbookValues(sheet: ExcelJS.Worksheet, record: ArchiveRecord, it
   );
 }
 
-function fillInspectionLotProjectNames(sheet: ExcelJS.Worksheet, record: ArchiveRecord, item: ArchiveItem) {
+function fillInspectionLotProjectNames(sheet: ExcelJS.Worksheet, record: ArchiveRecord, item: ArchiveItem, isSwitchStation: boolean) {
   if (!item.title.includes("检验批质量验收记录")) {
     return;
   }
 
-  const context = inspectionLotContext(record, item);
+  const context = isSwitchStation ? switchStationInspectionLotContext(record, item) : inspectionLotContext(record, item);
   fillAfterLabel(sheet, ["单位（子单位）工程名称"], context.unitProjectName);
   fillAfterLabel(sheet, ["分部（子分部）工程名称"], context.divisionName);
   fillAfterLabel(sheet, ["分项工程名称"], context.subitemName);
+}
+
+function shouldSkipProjectNameAutoFill(item: ArchiveItem, isSwitchStation: boolean): boolean {
+  if (!isSwitchStation) {
+    return false;
+  }
+  return /隐蔽工程|检查记录|施工记录|测量记录/.test(item.title);
 }
 
 function inspectionLotContext(record: ArchiveRecord, item: ArchiveItem): {
@@ -367,26 +388,24 @@ function preserveProcessWorkbookPrintArea(zip: PizZip, templateZip: PizZip) {
       return;
     }
     const range = dimensionMatch[1]; // e.g. "A1:AI25"
+    if (!/^[A-Z]+\d+(?::[A-Z]+\d+)?$/.test(range)) {
+      return;
+    }
     const absRange = toAbsoluteRange(range);
     
-    printAreas.push(`<definedName name="_xlnm.Print_Area" localSheetId="${index}">${sheetName}!${absRange}</definedName>`);
+    printAreas.push(`<definedName name="_xlnm.Print_Area" localSheetId="${index}">${quoteSheetName(sheetName)}!${absRange}</definedName>`);
   });
 
   if (printAreas.length === 0) {
+    zip.file("xl/workbook.xml", removePrintAreas(workbookXml));
     return;
   }
 
   const printAreasXml = printAreas.join("");
-  let nextWorkbookXml = workbookXml;
-  
-  if (nextWorkbookXml.includes("_xlnm.Print_Area")) {
-    nextWorkbookXml = nextWorkbookXml.replace(/<definedName name="_xlnm\.Print_Area"[^>]*>[\s\S]*?<\/definedName>/g, "");
-  }
-  
-  const definedNamesMatch = nextWorkbookXml.match(/<definedNames\b([^>]*)>([\s\S]*?)<\/definedNames>/);
-  if (definedNamesMatch) {
-    const [, attrs, body] = definedNamesMatch;
-    nextWorkbookXml = nextWorkbookXml.replace(/<definedNames\b([^>]*)>([\s\S]*?)<\/definedNames>/, `<definedNames${attrs}>${printAreasXml}${body}</definedNames>`);
+  let nextWorkbookXml = removePrintAreas(workbookXml);
+
+  if (/<definedNames\b[^>]*>[\s\S]*?<\/definedNames>/.test(nextWorkbookXml)) {
+    nextWorkbookXml = nextWorkbookXml.replace(/<definedNames\b[^>]*>[\s\S]*?<\/definedNames>/, `<definedNames>${printAreasXml}</definedNames>`);
   } else if (/<definedNames\/>/.test(nextWorkbookXml)) {
     nextWorkbookXml = nextWorkbookXml.replace(/<definedNames\/>/, `<definedNames>${printAreasXml}</definedNames>`);
   } else {
@@ -394,4 +413,17 @@ function preserveProcessWorkbookPrintArea(zip: PizZip, templateZip: PizZip) {
   }
 
   zip.file("xl/workbook.xml", nextWorkbookXml);
+}
+
+function removePrintAreas(workbookXml: string): string {
+  return workbookXml
+    .replace(/<definedNames\b[^>]*>[\s\S]*?<\/definedNames>/g, "")
+    .replace(/<definedNames>\s*<\/definedNames>/g, "");
+}
+
+function quoteSheetName(sheetName: string): string {
+  if (/^[A-Za-z0-9_\u4e00-\u9fa5]+$/.test(sheetName)) {
+    return sheetName;
+  }
+  return `'${sheetName.replace(/'/g, "''")}'`;
 }

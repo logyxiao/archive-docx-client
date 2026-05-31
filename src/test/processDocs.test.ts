@@ -117,7 +117,8 @@ describe("process docs generation", () => {
       expect(result.files).toHaveLength(1);
       expect(paths[0]).toContain("开工报审");
       expect(xml).toContain("测试监理项目部");
-      expect(xml).toContain("我方承担的 测试工程 光伏方阵安装子单位工程");
+      expect(xml).toContain("我方承担的</w:t>");
+      expect(xml).toContain("<w:u w:val=\"single\"/></w:rPr><w:t xml:space=\"preserve\"> 测试工程 光伏方阵安装子单位工程 </w:t>");
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
     });

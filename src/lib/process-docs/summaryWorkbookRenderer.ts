@@ -1,8 +1,18 @@
 import PizZip from "pizzip";
 import type { ArchiveItem, ArchiveRecord } from "../types";
 import { resolveProcessFields } from "./fields";
+import {
+  followingSwitchStationDivisionChildren,
+  isSwitchStationSummaryTemplate,
+  normalizeSwitchStationQualityName,
+  switchStationContextRecords,
+  switchStationDivisionName,
+  switchStationSubunitName,
+  switchStationSubunitParts,
+  switchStationUnitProjectName,
+} from "./switchStation";
 import { inspectionApplicationFullSubject, inspectionApplicationSubject, subunitProjectName } from "./textReplacement";
-import type { ProcessTemplate, ProcessUserFields } from "./types";
+import type { ProcessTemplate, ProcessTemplateModule, ProcessUserFields } from "./types";
 import { archiveProjectCode, escapeRegExp, escapeXml } from "./utils";
 
 export function renderSummaryWorkbook(
@@ -11,6 +21,8 @@ export function renderSummaryWorkbook(
   userFields: ProcessUserFields = {},
   item?: ArchiveItem,
   processTemplate?: ProcessTemplate,
+  templateModule: ProcessTemplateModule = "process",
+  contextRecords: ArchiveRecord[] = [record],
 ): Uint8Array {
   const zip = new PizZip(template);
   const sheet = zip.file("xl/worksheets/sheet1.xml");
@@ -21,13 +33,14 @@ export function renderSummaryWorkbook(
   const fields = resolveProcessFields(userFields, record.filingUnit || record.owner);
   let xml = sheet.asText();
   const isDivisionEvaluation = isDivisionEvaluationTemplate(processTemplate);
+  const isSwitchStation = templateModule === "switch-station";
   xml = setInlineStringCell(xml, "F4", archiveProjectCode(record.archiveCode));
   if (item) {
     xml = isDivisionEvaluation
-      ? fillDivisionEvaluationWorkbook(xml, record, item)
+      ? fillDivisionEvaluationWorkbook(xml, record, item, isSwitchStation)
       : isSubunitSummaryTemplate(processTemplate)
-      ? fillSubunitQualityWorkbook(xml, record, item)
-      : fillDivisionQualityWorkbook(xml, record, item);
+      ? fillSubunitQualityWorkbook(xml, record, item, processTemplate, contextRecords)
+      : fillDivisionQualityWorkbook(xml, record, item, isSwitchStation);
     if (!isDivisionEvaluation) {
       xml = preserveSummaryQualityPrintLayout(xml);
     }
@@ -51,8 +64,14 @@ export function renderSummaryWorkbook(
   return zip.generate({ type: "uint8array", compression: "DEFLATE" });
 }
 
-function fillSubunitQualityWorkbook(xml: string, record: ArchiveRecord, item: ArchiveItem): string {
-  const summary = subunitQualitySummary(record, item);
+function fillSubunitQualityWorkbook(
+  xml: string,
+  record: ArchiveRecord,
+  item: ArchiveItem,
+  template: ProcessTemplate | undefined,
+  contextRecords: ArchiveRecord[],
+): string {
+  const summary = subunitQualitySummary(record, item, template, contextRecords);
   let nextXml = xml;
   nextXml = setInlineStringCell(nextXml, "I2", summary.subunitProjectName);
   nextXml = setInlineStringCell(nextXml, "G6", summary.unitProjectName);
@@ -75,8 +94,8 @@ function fillSubunitQualityWorkbook(xml: string, record: ArchiveRecord, item: Ar
   return nextXml;
 }
 
-function fillDivisionQualityWorkbook(xml: string, record: ArchiveRecord, item: ArchiveItem): string {
-  const summary = divisionQualitySummary(record, item);
+function fillDivisionQualityWorkbook(xml: string, record: ArchiveRecord, item: ArchiveItem, isSwitchStation = false): string {
+  const summary = divisionQualitySummary(record, item, isSwitchStation);
   let nextXml = xml;
   nextXml = setInlineStringCell(nextXml, "I2", summary.divisionName);
   nextXml = setInlineStringCell(nextXml, "G6", summary.unitProjectName);
@@ -100,8 +119,8 @@ function fillDivisionQualityWorkbook(xml: string, record: ArchiveRecord, item: A
   return nextXml;
 }
 
-function fillDivisionEvaluationWorkbook(xml: string, record: ArchiveRecord, item: ArchiveItem): string {
-  const summary = divisionQualitySummary(record, item);
+function fillDivisionEvaluationWorkbook(xml: string, record: ArchiveRecord, item: ArchiveItem, isSwitchStation = false): string {
+  const summary = divisionQualitySummary(record, item, isSwitchStation);
   let nextXml = xml;
 
   for (let index = 0; index < 15; index += 1) {
@@ -213,11 +232,19 @@ function upsertXmlAttribute(attrs: string, name: string, value: string): string 
   return `${attrs} ${name}="${value}"`;
 }
 
-function subunitQualitySummary(record: ArchiveRecord, item: ArchiveItem): {
+function subunitQualitySummary(record: ArchiveRecord, item: ArchiveItem, template: ProcessTemplate | undefined, contextRecords: ArchiveRecord[]): {
   subunitProjectName: string;
   unitProjectName: string;
   parts: Array<{ name: string; count: number }>;
 } {
+  if (isSwitchStationSummaryTemplate(template)) {
+    return {
+      subunitProjectName: switchStationSubunitName(item.title),
+      unitProjectName: switchStationUnitProjectName(),
+      parts: switchStationSubunitParts(switchStationContextRecords(contextRecords)),
+    };
+  }
+
   const followingItems = record.items.slice(record.items.indexOf(item) + 1);
   const parts = followingItems
     .slice(0, nextSubunitBoundaryIndex(followingItems))
@@ -234,18 +261,20 @@ function subunitQualitySummary(record: ArchiveRecord, item: ArchiveItem): {
   };
 }
 
-function divisionQualitySummary(record: ArchiveRecord, item: ArchiveItem): {
+function divisionQualitySummary(record: ArchiveRecord, item: ArchiveItem, isSwitchStation = false): {
   divisionName: string;
   unitProjectName: string;
   subdivisionCount: string;
   items: Array<{ name: string; inspectionLotCount: number | "/" }>;
 } {
-  const divisionName = inspectionApplicationSubject(item.title);
+  const divisionName = isSwitchStation ? switchStationDivisionName(item.title) : inspectionApplicationSubject(item.title);
   const followingItems = record.items.slice(record.items.indexOf(item) + 1);
-  const children = followingItems
-    .slice(0, nextDivisionBoundaryIndex(followingItems))
-    .filter((candidate) => isDivisionSummaryChild(candidate.title));
-  const items = groupedDivisionSummaryChildren(record, children);
+  const children = isSwitchStation
+    ? followingSwitchStationDivisionChildren(record, item)
+    : followingItems
+      .slice(0, nextDivisionBoundaryIndex(followingItems))
+      .filter((candidate) => isDivisionSummaryChild(candidate.title));
+  const items = groupedDivisionSummaryChildren(record, children, isSwitchStation);
 
   return {
     divisionName,
@@ -258,10 +287,11 @@ function divisionQualitySummary(record: ArchiveRecord, item: ArchiveItem): {
 function groupedDivisionSummaryChildren(
   record: ArchiveRecord,
   children: ArchiveItem[],
+  isSwitchStation = false,
 ): Array<{ name: string; inspectionLotCount: number | "/" }> {
   const groups = new Map<string, { name: string; inspectionLotCount: number }>();
   for (const child of children) {
-    const name = qualityItemName(child.title);
+    const name = isSwitchStation ? normalizeSwitchStationQualityName(qualityItemName(child.title)) : qualityItemName(child.title);
     const current = groups.get(name) ?? { name, inspectionLotCount: 0 };
     current.inspectionLotCount += countInspectionLots(record, child);
     groups.set(name, current);

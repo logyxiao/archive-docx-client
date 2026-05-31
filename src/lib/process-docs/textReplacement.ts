@@ -6,18 +6,18 @@ import { archiveProjectCode } from "./utils";
 
 export function replaceBusinessText(value: string, record: ArchiveRecord, item: ArchiveItem, userFields: ProcessUserFields): string {
   const fields = resolveProcessFields(userFields, item.owner || record.filingUnit);
-  const projectName = userFields.projectName?.trim() || record.projectName;
+  const projectName = normalizeProjectName(userFields.projectName?.trim() || record.projectName);
   let result = value;
   for (const pattern of PROJECT_NAME_PATTERNS) {
     result = result.replace(pattern, projectName);
   }
+  result = result.replace(/MWP/g, "MWp");
 
   result = result.replace(/5028G01-[A-Z0-9-]+-\d{2,}/g, (match) => {
     return item.fileCode && item.fileCode !== "/" ? item.fileCode : match;
   });
   result = result.replace(/5028G01-0011/g, archiveProjectCode(record.archiveCode));
   result = result.replace(/中核华辰建筑工程有限公司/g, fields.constructionUnit || fields.generalContractorUnit);
-  result = replaceStartReportScope(result, projectName, item.title);
 
   const sourceMissingReplacements: Record<string, string> = {
     河南中核五院研究设计有限公司: fields.supervisionDepartment,
@@ -40,12 +40,17 @@ export function startReportScope(projectName: string, title: string): string {
   return suffix ? `${projectName} ${suffix}` : "";
 }
 
+function normalizeProjectName(value: string): string {
+  return value.replace(/MWP/g, "MWp");
+}
+
 export function subunitProjectName(title: string): string {
   return title
     .replace(/^\s*\d+[、.．\-\s]*/, "")
     .replace(/^.*?项目\s*/, "")
     .replace(/\s*质量(?:报验申请|报审表)及验收记录\s*$/, "")
     .replace(/[，,。；;：:\s]+$/g, "")
+    .replace(/\s*开工报审表?\s*$/, "")
     .trim();
 }
 
@@ -83,10 +88,6 @@ export function replaceStartReportScopeText(text: string, projectName: string, t
   }
 
   return text.replace(/我方承担的\s*[^，,]*?，已完成了/g, `我方承担的 ${scope} ，已完成了`);
-}
-
-function replaceStartReportScope(text: string, projectName: string, title: string): string {
-  return replaceStartReportScopeText(text, projectName, title);
 }
 
 function startReportSuffix(title: string): string {

@@ -4,6 +4,7 @@ import { PROCESS_OUTPUT_DIR, SWITCH_STATION_OUTPUT_DIR } from "./constants";
 import { renderProcessDocx } from "./docxRenderer";
 import { processOutputName } from "./naming";
 import { renderSummaryWorkbook } from "./summaryWorkbookRenderer";
+import { switchStationContextRecords } from "./switchStation";
 import {
   getProcessRecordApplicability,
   isRecordInTemplateModule,
@@ -12,7 +13,7 @@ import {
   loadProcessTemplate,
   matchingTemplatesByTitle,
 } from "./templates";
-import type { GenerateProcessOptions, ProcessGenerationResult, ProcessTemplate, ProcessUserFields } from "./types";
+import type { GenerateProcessOptions, ProcessGenerationResult, ProcessTemplate, ProcessTemplateModule, ProcessUserFields } from "./types";
 import { joinPath, sanitizeFileName } from "./utils";
 import { renderProcessWorkbook } from "./workbookRenderer";
 
@@ -23,6 +24,7 @@ export async function generateProcessDocs(
 ): Promise<ProcessGenerationResult> {
   const manifest = await loadProcessManifest();
   const templateModule = options.templateModule ?? "process";
+  const contextRecords = templateModule === "switch-station" ? switchStationContextRecords(records) : records;
   const selectedTemplateCategories = normalizeProcessTemplateCategories(options.selectedTemplateCategories);
   const selected = records.filter((record) =>
     options.selectedCodes.includes(record.archiveCode) && isRecordInTemplateModule(record, templateModule),
@@ -49,9 +51,9 @@ export async function generateProcessDocs(
         continue;
       }
 
-      const templates = allTemplates.filter((template) =>
+      const templates = expandSwitchStationTemplates(item, allTemplates.filter((template) =>
         isProcessTemplateCategorySelected(template, selectedTemplateCategories),
-      );
+      ), templateModule);
       if (templates.length === 0) {
         continue;
       }
@@ -60,7 +62,7 @@ export async function generateProcessDocs(
         const outputName = processOutputName(template, item);
         const outputPath = joinPath(recordOutputDir, outputName);
         try {
-          const bytes = await renderProcessTemplate(template, record, item, options.userFields ?? {});
+          const bytes = await renderProcessTemplate(template, record, item, options.userFields ?? {}, templateModule, contextRecords);
           await writeFile(outputPath, bytes);
           files.push({ name: outputName, path: outputPath });
         } catch (error) {
@@ -73,18 +75,50 @@ export async function generateProcessDocs(
   return { files, skipped, errors };
 }
 
+function expandSwitchStationTemplates(
+  item: ArchiveItem,
+  templates: ProcessTemplate[],
+  templateModule: string,
+): ProcessTemplate[] {
+  if (templateModule !== "switch-station") {
+    return templates;
+  }
+
+  const expanded: ProcessTemplate[] = [];
+  for (const template of templates) {
+    expanded.push(template);
+    if (
+      template.kind === "xlsx"
+      && (template.templateFile === "屋外接地装置安装分项工程质量验收表.xlsx"
+        || template.templateFile === "屋内接地装置安装分项工程质量验收表.xlsx")
+      && item.fileCode.endsWith("-001")
+    ) {
+      expanded.push({
+        ...template,
+        originalName: template.originalName.replace("-001", "-002"),
+        outputFileCodeOverride: item.fileCode.replace(/-001$/, "-002"),
+      });
+    }
+  }
+
+  return expanded;
+}
+
 async function renderProcessTemplate(
   template: ProcessTemplate,
   record: ArchiveRecord,
   item: ArchiveItem,
   userFields: ProcessUserFields,
+  templateModule: ProcessTemplateModule = "process",
+  contextRecords: ArchiveRecord[] = [record],
 ): Promise<Uint8Array> {
   const bytes = await loadProcessTemplate(template.templateFile);
+  const renderItem = template.outputFileCodeOverride ? { ...item, fileCode: template.outputFileCodeOverride } : item;
   if (template.kind === "docx") {
-    return renderProcessDocx(bytes, record, item, userFields);
+    return renderProcessDocx(bytes, record, renderItem, userFields, templateModule);
   }
 
   return isSummaryWorkbookTemplate(template)
-    ? renderSummaryWorkbook(bytes, record, userFields, item, template)
-    : renderProcessWorkbook(bytes, record, item, userFields);
+    ? renderSummaryWorkbook(bytes, record, userFields, renderItem, template, templateModule, contextRecords)
+    : renderProcessWorkbook(bytes, record, renderItem, userFields, templateModule);
 }

@@ -1,13 +1,14 @@
 import PizZip from "pizzip";
 import type { ArchiveItem, ArchiveRecord } from "../types";
+import { switchStationApplicationSubject } from "./switchStation";
 import {
   inspectionApplicationSubject,
   replaceBusinessText,
-  replaceStartReportScopeText,
+  startReportScope,
   subunitInspectionSubject,
   subunitProjectName,
 } from "./textReplacement";
-import type { ProcessUserFields } from "./types";
+import type { ProcessTemplateModule, ProcessUserFields } from "./types";
 import { escapeXml, unescapeXml } from "./utils";
 
 export function renderProcessDocx(
@@ -15,6 +16,7 @@ export function renderProcessDocx(
   record: ArchiveRecord,
   item: ArchiveItem,
   userFields: ProcessUserFields = {},
+  templateModule: ProcessTemplateModule = "process",
 ): Uint8Array {
   const zip = new PizZip(template);
   for (const path of ["word/document.xml", ...Object.keys(zip.files).filter((name) => /^word\/(header|footer)\d+\.xml$/.test(name))]) {
@@ -22,18 +24,26 @@ export function renderProcessDocx(
     if (!file) {
       continue;
     }
-    const renderedXml = replaceDocxParagraphs(replaceBusinessText(file.asText(), record, item, userFields), record, item, userFields);
+    const renderedXml = replaceDocxParagraphs(replaceBusinessText(file.asText(), record, item, userFields), record, item, userFields, templateModule);
     zip.file(path, path === "word/document.xml" ? compactDocxPageLayout(renderedXml) : renderedXml);
   }
 
   return zip.generate({ type: "uint8array", compression: "DEFLATE" });
 }
 
-function replaceDocxParagraphs(xml: string, record: ArchiveRecord, item: ArchiveItem, userFields: ProcessUserFields): string {
-  const projectName = userFields.projectName?.trim() || record.projectName;
+function replaceDocxParagraphs(
+  xml: string,
+  record: ArchiveRecord,
+  item: ArchiveItem,
+  userFields: ProcessUserFields,
+  templateModule: ProcessTemplateModule,
+): string {
+  const projectName = (userFields.projectName?.trim() || record.projectName).replace(/MWP/g, "MWp");
   const subunitName = subunitProjectName(item.title);
   const subunitSubject = subunitInspectionSubject(item.title);
-  const inspectionSubject = inspectionApplicationSubject(item.title);
+  const inspectionSubject = templateModule === "switch-station"
+    ? switchStationApplicationSubject(item.title)
+    : inspectionApplicationSubject(item.title);
   return xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
     const text = paragraphText(paragraph);
     let nextText = text;
@@ -44,7 +54,7 @@ function replaceDocxParagraphs(xml: string, record: ArchiveRecord, item: Archive
     }
 
     if (text.includes("我方承担的") && text.includes("已完成了")) {
-      nextText = replaceStartReportScopeText(nextText, projectName, item.title);
+      nextParagraph = replaceStartReportUnderlinedScope(nextParagraph, startReportScope(projectName, item.title));
     }
 
     if (subunitName) {
@@ -68,10 +78,47 @@ function replaceDocxParagraphs(xml: string, record: ArchiveRecord, item: Archive
     }
 
     if (text.includes("工程已完成施工任务") && text.includes("现报请查验")) {
-      nextText = replaceHiddenWorkSubjectText(nextText, item.title);
+      if (templateModule === "switch-station") {
+        nextParagraph = replaceTextNodes(nextParagraph, "设备基础模板", switchStationApplicationSubject(item.title));
+      } else {
+        nextText = replaceHiddenWorkSubjectText(nextText, item.title);
+      }
     }
 
     return nextText === text ? nextParagraph : replaceParagraphText(nextParagraph, nextText);
+  });
+}
+
+function replaceStartReportUnderlinedScope(paragraph: string, scope: string): string {
+  if (!scope) {
+    return paragraph;
+  }
+
+  let afterPrefix = false;
+  let scopeWritten = false;
+  return paragraph.replace(/<w:r\b[^>]*>[\s\S]*?<\/w:r>/g, (run) => {
+    const text = runText(run);
+    if (!afterPrefix) {
+      if (text.includes("我方承担的")) {
+        afterPrefix = true;
+      }
+      return run;
+    }
+
+    if (text.includes("，已完成了")) {
+      return run;
+    }
+
+    if (!/<w:u\b/.test(run)) {
+      return run;
+    }
+
+    if (!scopeWritten) {
+      scopeWritten = true;
+      return replaceRunText(run, ` ${scope} `);
+    }
+
+    return replaceRunText(run, "");
   });
 }
 
@@ -96,6 +143,12 @@ function hiddenWorkSubject(title: string): string {
 
 function paragraphText(paragraph: string): string {
   return Array.from(paragraph.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g))
+    .map((match) => unescapeXml(match[1]))
+    .join("");
+}
+
+function runText(run: string): string {
+  return Array.from(run.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g))
     .map((match) => unescapeXml(match[1]))
     .join("");
 }

@@ -13,6 +13,7 @@ export interface ProcessTemplate {
   originalName: string;
   templateFile: string;
   outputExtension: ".docx" | ".xlsx";
+  outputFileCodeOverride?: string;
 }
 
 export interface GenerateProcessOptions {
