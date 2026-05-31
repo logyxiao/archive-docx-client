@@ -17,6 +17,23 @@ export function fillAfterLabel(sheet: ExcelJS.Worksheet, labels: string[], value
   }
 }
 
+export function fillAfterLabelExcept(sheet: ExcelJS.Worksheet, labels: string[], excludedLabels: string[], value: string) {
+  if (!value) {
+    return;
+  }
+
+  for (const cell of cellsMatchingLabelsExcept(sheet, labels, excludedLabels)) {
+    const target = cell.value && String(cell.value).includes("：") && !String(cell.value).trim().endsWith("：")
+      ? cell
+      : cellToRightOfMergedRange(sheet, cell);
+    if (target === cell) {
+      target.value = replaceAfterColon(String(cell.value), value);
+    } else {
+      target.value = value;
+    }
+  }
+}
+
 export function clearAfterLabel(sheet: ExcelJS.Worksheet, labels: string[]) {
   for (const cell of cellsMatchingLabels(sheet, labels)) {
     const target = cellToRightOfMergedRange(sheet, cell);
@@ -74,6 +91,25 @@ function cellsMatchingLabels(sheet: ExcelJS.Worksheet, labels: string[]): ExcelJ
         return;
       }
       const value = typeof cell.value === "string" ? cell.value.replace(/\s+/g, "") : "";
+      if (labels.some((label) => value.includes(label))) {
+        cells.push(cell);
+      }
+    });
+  }
+  return cells;
+}
+
+function cellsMatchingLabelsExcept(sheet: ExcelJS.Worksheet, labels: string[], excludedLabels: string[]): ExcelJS.Cell[] {
+  const cells: ExcelJS.Cell[] = [];
+  for (const row of sheet.getRows(1, sheet.rowCount) ?? []) {
+    row.eachCell({ includeEmpty: false }, (cell) => {
+      if (isMergedSlave(cell)) {
+        return;
+      }
+      const value = normalizeCellText(cell);
+      if (excludedLabels.some((label) => value.includes(label))) {
+        return;
+      }
       if (labels.some((label) => value.includes(label))) {
         cells.push(cell);
       }

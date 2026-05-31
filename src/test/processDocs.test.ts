@@ -469,6 +469,38 @@ describe("process docs generation", () => {
     expect(sheet.getCell("AE11").value).toBe("施工技术负责人");
   });
 
+    it("fills inspection lot division and subitem names from source items", async () => {
+    const division = {
+      ...processRecord.items[0],
+      sequence: "1",
+      title: "高明分布式项目 通用工程分部工程质量报验申请及验收记录",
+    };
+    const subitem = {
+      ...processRecord.items[0],
+      sequence: "2",
+      title: "高明分布式项目 建筑电气工程分项工程质量报验申请及验收记录",
+    };
+    const item = {
+      ...processRecord.items[0],
+      sequence: "3",
+      title: "高明分布式项目 1#厂房光伏组件接地装置安装检验批质量验收记录",
+    };
+    const record = {
+      ...processRecord,
+      items: [division, subitem, item],
+    };
+    const template = readPublic("/templates/process-docs/厂房接地装置安装检验批质量验收记录.xlsx");
+    const workbook = await workbookFrom(
+      await renderProcessWorkbook(template, record, item, {
+        projectName: "用户填写工程名称",
+      }),
+    );
+    const sheet = workbook.worksheets[0];
+
+    expect(sheet.getCell("Z6").value).toBe("通用工程");
+    expect(sheet.getCell("I7").value).toBe("建筑电气工程");
+  });
+
     it("fills numeric self-check values within quality standard ranges", async () => {
     const item = processRecord.items[43];
     const template = readPublic("/templates/process-docs/厂房墙架檩条支撑系统组装工程检验批质量验收记录.xlsx");
@@ -493,6 +525,53 @@ describe("process docs generation", () => {
     expect(values).toHaveLength(10);
     expect(values.every((value) => Number.isFinite(value))).toBe(true);
     expect(values.every((value) => value >= 0 && value <= 2)).toBe(true);
+  });
+
+    it("distributes subitem quality acceptance values across upper-limit standards", async () => {
+    const item = processRecord.items[4];
+    const template = readPublic("/templates/process-docs/厂房支架安装分项工程质量验收表.xlsx");
+    const workbook = await workbookFrom(await renderProcessWorkbook(template, processRecord, item));
+    const sheet = workbook.worksheets[0];
+    const valuesForTwo = String(sheet.getCell("V21").value).split(",").map(Number);
+    const valuesForThree = String(sheet.getCell("V22").value).split(",").map(Number);
+
+    expect(valuesForTwo).toHaveLength(10);
+    expect(valuesForTwo.every((value) => Number.isInteger(value) && value >= 0 && value <= 2)).toBe(true);
+    expect(new Set(valuesForTwo).size).toBeGreaterThan(1);
+    expect(valuesForThree).toHaveLength(10);
+    expect(valuesForThree.every((value) => Number.isInteger(value) && value >= 0 && value <= 3)).toBe(true);
+    expect(new Set(valuesForThree).size).toBeGreaterThan(1);
+  });
+
+    it("uses absolute values for not-greater-than plus-minus quality standards", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Sheet1");
+    sheet.mergeCells("A1:B1");
+    sheet.mergeCells("C1:L1");
+    sheet.mergeCells("A2:B2");
+    sheet.mergeCells("C2:L2");
+    sheet.getCell("A1").value = "质量标准";
+    sheet.getCell("C1").value = "质量验收结果";
+    sheet.getCell("A2").value = "不应大于±1°";
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const rendered = await workbookFrom(await renderProcessWorkbook(new Uint8Array(buffer), processRecord, processRecord.items[0]));
+    const values = String(rendered.worksheets[0].getCell("C2").value).split(",").map(Number);
+
+    expect(values).toHaveLength(10);
+    expect(values.every((value) => value === 0 || value === 1)).toBe(true);
+    expect(new Set(values).size).toBe(2);
+  });
+
+    it("preserves inspection lot workbook print margins and scale", async () => {
+    const item = processRecord.items[35];
+    const template = readPublic("/templates/process-docs/厂房接地装置安装检验批质量验收记录.xlsx");
+    const rendered = await renderProcessWorkbook(template, processRecord, item);
+    const sourceXml = await xlsxXml(template, "xl/worksheets/sheet1.xml");
+    const renderedXml = await xlsxXml(rendered, "xl/worksheets/sheet1.xml");
+
+    expect(renderedXml.match(/<pageMargins[^>]+>/)?.[0]).toBe(sourceXml.match(/<pageMargins[^>]+>/)?.[0]);
+    expect(renderedXml.match(/<pageSetup[^>]+>/)?.[0]).toContain('scale="100"');
   });
   });
 

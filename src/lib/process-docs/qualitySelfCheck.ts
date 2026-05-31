@@ -86,17 +86,52 @@ function fillSelfCheckRow(sheet: ExcelJS.Worksheet, rowNumber: number, range: Co
   }
 
   if (writableCells.length === 1 && range.right > range.left) {
-    writableCells[0].value = Array.from({ length: SAMPLE_COUNT }, () => randomValueInRange(numericRange)).join(",");
+    writableCells[0].value = distributedValuesInRange(numericRange, SAMPLE_COUNT).join(",");
     return;
   }
 
-  for (const cell of writableCells) {
-    cell.value = randomValueInRange(numericRange);
-  }
+  const values = distributedValuesInRange(numericRange, writableCells.length);
+  writableCells.forEach((cell, index) => {
+    cell.value = values[index];
+  });
 }
 
-function parseNumericQualityRange(text: string): NumericRange | null {
+function distributedValuesInRange(range: NumericRange, count: number): number[] {
+  if (count <= 0) {
+    return [];
+  }
+
+  const scale = 10 ** range.decimals;
+  const min = Math.round(range.min * scale);
+  const max = Math.round(range.max * scale);
+  const span = max - min;
+  if (span <= 0) {
+    return Array.from({ length: count }, () => min / scale);
+  }
+
+  if (span + 1 <= count) {
+    const allValues = Array.from({ length: span + 1 }, (_value, index) => min + index);
+    const rest = Array.from({ length: count - allValues.length }, () => randomInteger(min, max));
+    return shuffle([...allValues, ...rest]).map((value) => value / scale);
+  }
+
+  const values = Array.from({ length: count }, (_value, index) => {
+    const segmentStart = min + Math.floor((span * index) / count);
+    const segmentEnd = min + Math.floor((span * (index + 1)) / count);
+    return randomInteger(segmentStart, Math.max(segmentStart, segmentEnd));
+  });
+
+  return shuffle(values).map((value) => value / scale);
+}
+
+export function parseNumericQualityRange(text: string): NumericRange | null {
   const normalized = text.replace(/\s+/g, "");
+  const absolutePlusMinus = normalized.match(/(?:不应大于|不大于|不超过)±(-?\d+(?:\.\d+)?)/);
+  if (absolutePlusMinus) {
+    const limit = Number(absolutePlusMinus[1]);
+    return { min: 0, max: Math.abs(limit), decimals: decimalsFor(limit) };
+  }
+
   const plusMinus = normalized.match(/±(-?\d+(?:\.\d+)?)/);
   if (plusMinus) {
     const limit = Number(plusMinus[1]);
@@ -119,12 +154,17 @@ function parseNumericQualityRange(text: string): NumericRange | null {
   return null;
 }
 
-function randomValueInRange(range: NumericRange): number {
-  const scale = 10 ** range.decimals;
-  const min = Math.round(range.min * scale);
-  const max = Math.round(range.max * scale);
-  const value = min + Math.floor(Math.random() * (max - min + 1));
-  return value / scale;
+function randomInteger(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function shuffle<T>(values: T[]): T[] {
+  const shuffled = [...values];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
 }
 
 function rangeText(sheet: ExcelJS.Worksheet, rowNumber: number, range: ColumnRange): string {
