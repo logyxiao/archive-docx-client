@@ -69,7 +69,7 @@ export function getProcessTemplateCategory(template: ProcessTemplate): ProcessTe
     return "subunit-inspection-application";
   }
 
-  if (template.templateFile === "子单位工程质量验收记录.xlsx") {
+  if (name.includes("子单位") && name.includes("质量验收记录")) {
     return "summary-quality-acceptance";
   }
 
@@ -77,7 +77,7 @@ export function getProcessTemplateCategory(template: ProcessTemplate): ProcessTe
     return "division-inspection-application";
   }
 
-  if (name.includes("分部") && name.includes("质量验收记录")) {
+  if (name.includes("分部") && /质量(?:检查)?验收(?:记录|评定表)/.test(name)) {
     return "division-quality-acceptance";
   }
 
@@ -89,11 +89,11 @@ export function getProcessTemplateCategory(template: ProcessTemplate): ProcessTe
     return "inspection-lot-acceptance";
   }
 
-  if (name.includes("分项") && name.includes("质量验收")) {
+  if (name.includes("分项") && /质量(?:检查)?验收(?:记录|表|评定表)/.test(name)) {
     return "subitem-quality-acceptance";
   }
 
-  if (/施工记录|测量记录|检查记录|防腐记录|短路电流|开路电压|接地/.test(name)) {
+  if (/施工记录|测量记录|检查记录|防腐记录|短路电流|开路电压/.test(name)) {
     return "construction-record";
   }
 

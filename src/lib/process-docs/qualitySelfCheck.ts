@@ -64,6 +64,21 @@ function findQualitySelfCheckLayout(sheet: ExcelJS.Worksheet): { headerRow: numb
   return null;
 }
 
+function isSelfCheckNumericLike(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return true;
+  }
+  const str = normalizeText(value).trim();
+  if (str === "") {
+    return true;
+  }
+  if (!Number.isNaN(Number(str))) {
+    return true;
+  }
+  const parts = str.split(",");
+  return parts.length > 0 && parts.every((part) => !Number.isNaN(Number(part.trim())));
+}
+
 function shouldFillSelfCheckRow(sheet: ExcelJS.Worksheet, rowNumber: number, range: ColumnRange): boolean {
   const existingValues: unknown[] = [];
   for (let column = range.left; column <= range.right; column += 1) {
@@ -73,7 +88,7 @@ function shouldFillSelfCheckRow(sheet: ExcelJS.Worksheet, rowNumber: number, ran
     }
   }
 
-  return existingValues.length === 0 || existingValues.every(isNumericLike);
+  return existingValues.length === 0 || existingValues.every(isSelfCheckNumericLike);
 }
 
 function fillSelfCheckRow(sheet: ExcelJS.Worksheet, rowNumber: number, range: ColumnRange, numericRange: NumericRange) {
@@ -231,10 +246,24 @@ function decimalsFor(value: number): number {
   return Number.isInteger(value) ? 0 : String(value).split(".")[1]?.length ?? 0;
 }
 
-function isNumericLike(value: unknown): boolean {
-  return typeof value === "number" || (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value)));
-}
-
 function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.replace(/\s+/g, "") : typeof value === "number" ? String(value) : "";
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value.replace(/\s+/g, "");
+  }
+  if (typeof value === "number") {
+    return String(value);
+  }
+  if (typeof value === "object") {
+    const richTextValue = value as { richText?: Array<{ text?: string }> };
+    if (Array.isArray(richTextValue.richText)) {
+      return richTextValue.richText
+        .map((item) => (item && typeof item.text === "string" ? item.text : ""))
+        .join("")
+        .replace(/\s+/g, "");
+    }
+  }
+  return "";
 }

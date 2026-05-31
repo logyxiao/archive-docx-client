@@ -23,7 +23,7 @@ export async function renderProcessWorkbook(
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
-  return preserveProcessWorkbookPrintLayout(new Uint8Array(buffer));
+  return preserveProcessWorkbookPrintLayout(new Uint8Array(buffer), template);
 }
 
 function applyWorkbookValues(sheet: ExcelJS.Worksheet, record: ArchiveRecord, item: ArchiveItem, userFields: ProcessUserFields) {
@@ -106,11 +106,33 @@ function isDivisionQualityItem(title: string): boolean {
 }
 
 function isSubitemQualityItem(title: string): boolean {
-  return /分项工程质量(?:报验申请|报审表)及验收记录/.test(title);
+  return /分项工程(?:工程)?质量(?:报验申请|报审表)及验收记录/.test(title)
+    || /分项工程验收记录$/.test(title);
 }
 
 function fillUnitScopedFields(sheet: ExcelJS.Worksheet, fields: ResolvedProcessFields) {
+  let inSignatureSection = false;
   for (const row of sheet.getRows(1, sheet.rowCount) ?? []) {
+    if (!inSignatureSection) {
+      row.eachCell({ includeEmpty: false }, (cell) => {
+        if (isMergedSlave(cell)) return;
+        const val = typeof cell.value === "string" ? cell.value.replace(/\s+/g, "") : "";
+        if (
+          val.includes("签字") ||
+          val.includes("验收单位") ||
+          val.includes("验收结论") ||
+          val.includes("签字栏") ||
+          val.includes("项目监理机构")
+        ) {
+          inSignatureSection = true;
+        }
+      });
+    }
+
+    if (inSignatureSection) {
+      continue;
+    }
+
     if (rowHasExactLabel(row, "总承包单位")) {
       fillOrClearAfterLabelInRow(row, ["总承包单位"], fields.generalContractorUnit);
       fillOrClearAfterLabelInRow(row, ["项目负责人"], fields.generalContractorProjectManager);
@@ -138,8 +160,9 @@ function fillOrClearProfessionalForeman(sheet: ExcelJS.Worksheet, value: string)
   }
 }
 
-function preserveProcessWorkbookPrintLayout(bytes: Uint8Array): Uint8Array {
+function preserveProcessWorkbookPrintLayout(bytes: Uint8Array, template: ArrayBuffer | Uint8Array): Uint8Array {
   const zip = new PizZip(bytes);
+  const templateZip = new PizZip(template);
   const worksheetPaths = Object.keys(zip.files).filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
 
   for (const path of worksheetPaths) {
@@ -147,10 +170,23 @@ function preserveProcessWorkbookPrintLayout(bytes: Uint8Array): Uint8Array {
     if (!sheet) {
       continue;
     }
-    zip.file(path, forceOnePageWorksheetLayout(sheet.asText()));
+    const templateSheet = templateZip.file(path);
+    let sheetXml = forceOnePageWorksheetLayout(sheet.asText());
+    if (templateSheet) {
+      sheetXml = restoreTemplateSheetFormatting(sheetXml, templateSheet.asText());
+    }
+    zip.file(path, sheetXml);
   }
 
-  preserveWorkbookPrintAreas(zip, worksheetPaths);
+  // Restore original styles.xml from template to preserve default font (宋体 10pt)
+  // ExcelJS replaces this with Calibri 11pt which makes all columns appear much wider
+  const templateStylesFile = templateZip.file("xl/styles.xml");
+  if (templateStylesFile) {
+    zip.file("xl/styles.xml", templateStylesFile.asText());
+  }
+
+  preserveProcessWorkbookPrintArea(zip, templateZip);
+
   return zip.generate({ type: "uint8array", compression: "DEFLATE" });
 }
 
@@ -164,6 +200,43 @@ function forceOnePageWorksheetLayout(xml: string): string {
   );
   nextXml = upsertPageSetup(nextXml);
   return nextXml;
+}
+
+/**
+ * Copy <sheetFormatPr> and <cols> from template to generated sheet XML
+ * so ExcelJS-injected defaultColWidth and altered column widths are reverted.
+ */
+function restoreTemplateSheetFormatting(generatedXml: string, templateXml: string): string {
+  let result = generatedXml;
+
+  // Restore <sheetFormatPr .../> — remove ExcelJS's version, insert template's (or nothing)
+  const templateSheetFormatPr = templateXml.match(/<sheetFormatPr[^>]*\/>/) ?.[0];
+  if (templateSheetFormatPr) {
+    // Replace generated sheetFormatPr with template's
+    if (/<sheetFormatPr[^>]*\/>/.test(result)) {
+      result = result.replace(/<sheetFormatPr[^>]*\/>/, templateSheetFormatPr);
+    } else {
+      result = result.replace(/(<sheetData\b)/, `${templateSheetFormatPr}$1`);
+    }
+  } else {
+    // Template has no sheetFormatPr — strip ExcelJS's injected one
+    result = result.replace(/<sheetFormatPr[^>]*\/>/, '');
+  }
+
+  // Restore <cols>...</cols> — replace generated with template's
+  const templateCols = templateXml.match(/<cols>[\s\S]*?<\/cols>/) ?.[0];
+  const generatedHasCols = /<cols>[\s\S]*?<\/cols>/.test(result);
+  if (templateCols) {
+    if (generatedHasCols) {
+      result = result.replace(/<cols>[\s\S]*?<\/cols>/, templateCols);
+    } else {
+      result = result.replace(/(<sheetData\b)/, `${templateCols}$1`);
+    }
+  } else if (generatedHasCols) {
+    result = result.replace(/<cols>[\s\S]*?<\/cols>/, '');
+  }
+
+  return result;
 }
 
 function upsertFitToPage(xml: string): string {
@@ -189,10 +262,11 @@ function upsertPageSetup(xml: string): string {
   const existing = /<pageSetup\b([^>]*)\/>/;
   if (existing.test(xml)) {
     return xml.replace(existing, (_match, attrs: string) => {
+      const cleanAttrs = attrs.replace(/\s+scale="[^"]*"/g, "");
       const nextAttrs = upsertXmlAttribute(
         upsertXmlAttribute(
           upsertXmlAttribute(
-            upsertXmlAttribute(attrs, "paperSize", "9"),
+            upsertXmlAttribute(cleanAttrs, "paperSize", "9"),
             "fitToWidth",
             "1",
           ),
@@ -212,40 +286,6 @@ function upsertPageSetup(xml: string): string {
     '<pageSetup paperSize="9" fitToWidth="1" fitToHeight="1" usePrinterDefaults="0"/>',
     "</worksheet>",
   );
-}
-
-function preserveWorkbookPrintAreas(zip: PizZip, worksheetPaths: string[]) {
-  const workbook = zip.file("xl/workbook.xml");
-  if (!workbook) {
-    return;
-  }
-
-  const workbookXml = workbook.asText();
-  const sheetNames = Array.from(workbookXml.matchAll(/<sheet\b[^>]*name="([^"]+)"[^>]*>/g)).map((match) => match[1]);
-  const printAreas = worksheetPaths
-    .map((path, index) => {
-      const sheet = zip.file(path);
-      const sheetName = sheetNames[index];
-      const dimension = sheet?.asText().match(/<dimension\b[^>]*ref="([^"]+)"/)?.[1];
-      if (!sheetName || !dimension) {
-        return null;
-      }
-      return `<definedName name="_xlnm.Print_Area" localSheetId="${index}">${sheetName}!${absoluteCellRange(dimension)}</definedName>`;
-    })
-    .filter((value): value is string => Boolean(value));
-
-  if (printAreas.length === 0) {
-    return;
-  }
-
-  const workbookWithoutPrintAreas = workbookXml.replace(/<definedName name="_xlnm\.Print_Area"[^>]*>[\s\S]*?<\/definedName>/g, "");
-  const nextWorkbookXml = /<definedNames\b[^>]*>[\s\S]*?<\/definedNames>/.test(workbookWithoutPrintAreas)
-    ? workbookWithoutPrintAreas.replace(/<definedNames\b([^>]*)>([\s\S]*?)<\/definedNames>/, (_match, attrs: string, body: string) => {
-        return `<definedNames${attrs}>${body}${printAreas.join("")}</definedNames>`;
-      })
-    : workbookWithoutPrintAreas.replace("</workbook>", `<definedNames>${printAreas.join("")}</definedNames></workbook>`);
-
-  zip.file("xl/workbook.xml", nextWorkbookXml);
 }
 
 function upsertSelfClosingElement(xml: string, tagName: string, elementXml: string, insertBefore: string): string {
@@ -282,10 +322,76 @@ function upsertXmlAttribute(attrs: string, name: string, value: string): string 
   return `${attrs} ${name}="${value}"`;
 }
 
-function absoluteCellRange(range: string): string {
-  return range.split(":").map(absoluteCellRef).join(":");
+/** Convert e.g. "A1:AI25" into "$A$1:$AI$25" */
+function toAbsoluteRange(range: string): string {
+  const toAbsCell = (cell: string) => {
+    const m = cell.match(/^([A-Z]+)(\d+)$/);
+    return m ? `$${m[1]}$${m[2]}` : `$${cell}`;
+  };
+  const [start, end] = range.split(":");
+  return end ? `${toAbsCell(start)}:${toAbsCell(end)}` : toAbsCell(start);
 }
 
-function absoluteCellRef(ref: string): string {
-  return ref.replace(/^([A-Z]+)(\d+)$/i, (_match, column: string, row: string) => `$${column.toUpperCase()}$${row}`);
+function preserveProcessWorkbookPrintArea(zip: PizZip, templateZip: PizZip) {
+  const workbook = zip.file("xl/workbook.xml");
+  if (!workbook) {
+    return;
+  }
+
+  const workbookXml = workbook.asText();
+  const sheets = workbookXml.match(/<sheet\s+[^>]*name="([^"]+)"[^>]*>/g) || [];
+  if (sheets.length === 0) {
+    return;
+  }
+
+  const printAreas: string[] = [];
+  sheets.forEach((sheetTag, index) => {
+    const nameMatch = sheetTag.match(/name="([^"]+)"/);
+    if (!nameMatch) {
+      return;
+    }
+    const sheetName = nameMatch[1];
+    
+    const sheetPath = `xl/worksheets/sheet${index + 1}.xml`;
+    const sheetFile = zip.file(sheetPath);
+    if (!sheetFile) {
+      return;
+    }
+    const sheetXml = sheetFile.asText();
+
+    // Prefer dimension from template sheet (avoids phantom columns added by ExcelJS)
+    const templateSheetFile = templateZip.file(sheetPath);
+    const sourceXml = templateSheetFile ? templateSheetFile.asText() : sheetXml;
+    const dimensionMatch = sourceXml.match(/<dimension\s+ref="([^"]+)"/);
+    if (!dimensionMatch) {
+      return;
+    }
+    const range = dimensionMatch[1]; // e.g. "A1:AI25"
+    const absRange = toAbsoluteRange(range);
+    
+    printAreas.push(`<definedName name="_xlnm.Print_Area" localSheetId="${index}">${sheetName}!${absRange}</definedName>`);
+  });
+
+  if (printAreas.length === 0) {
+    return;
+  }
+
+  const printAreasXml = printAreas.join("");
+  let nextWorkbookXml = workbookXml;
+  
+  if (nextWorkbookXml.includes("_xlnm.Print_Area")) {
+    nextWorkbookXml = nextWorkbookXml.replace(/<definedName name="_xlnm\.Print_Area"[^>]*>[\s\S]*?<\/definedName>/g, "");
+  }
+  
+  const definedNamesMatch = nextWorkbookXml.match(/<definedNames\b([^>]*)>([\s\S]*?)<\/definedNames>/);
+  if (definedNamesMatch) {
+    const [, attrs, body] = definedNamesMatch;
+    nextWorkbookXml = nextWorkbookXml.replace(/<definedNames\b([^>]*)>([\s\S]*?)<\/definedNames>/, `<definedNames${attrs}>${printAreasXml}${body}</definedNames>`);
+  } else if (/<definedNames\/>/.test(nextWorkbookXml)) {
+    nextWorkbookXml = nextWorkbookXml.replace(/<definedNames\/>/, `<definedNames>${printAreasXml}</definedNames>`);
+  } else {
+    nextWorkbookXml = nextWorkbookXml.replace("</workbook>", `<definedNames>${printAreasXml}</definedNames></workbook>`);
+  }
+
+  zip.file("xl/workbook.xml", nextWorkbookXml);
 }

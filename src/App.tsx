@@ -29,6 +29,7 @@ import {
   PROCESS_TEMPLATE_CATEGORY_IDS,
   normalizeProcessTemplateCategories,
   type ProcessTemplateCategoryId,
+  type ProcessTemplateModule,
 } from "./lib/processDocs";
 import { readBinaryFile, writeBinaryFile } from "./lib/tauriFiles";
 import type { ArchiveRecord } from "./lib/types";
@@ -37,8 +38,10 @@ const DEFAULT_BACKUP_NOTE = "";
 const LAST_OUTPUT_DIR_KEY = "archive-docx-client:last-output-dir";
 const PROCESS_FIELDS_KEY = "archive-docx-client:process-fields";
 const PROCESS_TEMPLATE_CATEGORIES_KEY = "archive-docx-client:process-template-categories";
+const SWITCH_STATION_TEMPLATE_CATEGORIES_KEY = "archive-docx-client:switch-station-template-categories";
 const ARCHIVE_DOCX_TAB = "archive-docx";
 const PROCESS_DOCS_TAB = "process-docs";
+const SWITCH_STATION_TAB = "switch-station-process-docs";
 
 interface SavedProcessFields {
   projectName: string;
@@ -93,9 +96,9 @@ function loadSavedProcessFields(): SavedProcessFields {
   }
 }
 
-function loadSavedProcessTemplateCategories(): ProcessTemplateCategoryId[] {
+function loadSavedProcessTemplateCategories(storageKey: string): ProcessTemplateCategoryId[] {
   try {
-    const rawValue = localStorage.getItem(PROCESS_TEMPLATE_CATEGORIES_KEY);
+    const rawValue = localStorage.getItem(storageKey);
     if (!rawValue) {
       return [...PROCESS_TEMPLATE_CATEGORY_IDS];
     }
@@ -114,7 +117,14 @@ function loadSavedProcessTemplateCategories(): ProcessTemplateCategoryId[] {
 function App() {
   const [activeTab, setActiveTab] = useState(ARCHIVE_DOCX_TAB);
   const savedProcessFields = useMemo(loadSavedProcessFields, []);
-  const savedProcessTemplateCategories = useMemo(loadSavedProcessTemplateCategories, []);
+  const savedProcessTemplateCategories = useMemo(
+    () => loadSavedProcessTemplateCategories(PROCESS_TEMPLATE_CATEGORIES_KEY),
+    [],
+  );
+  const savedSwitchStationTemplateCategories = useMemo(
+    () => loadSavedProcessTemplateCategories(SWITCH_STATION_TEMPLATE_CATEGORIES_KEY),
+    [],
+  );
   const [excelPath, setExcelPath] = useState("");
   const [outputDir, setOutputDir] = useState(() => localStorage.getItem(LAST_OUTPUT_DIR_KEY) ?? "");
   const actualOutputDir = useMemo(() => {
@@ -135,6 +145,7 @@ function App() {
   }, [outputDir, excelPath]);
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
+  const [showOnlySelected, setShowOnlySelected] = useState(false);
   const [previewRecord, setPreviewRecord] = useState<ArchiveRecord | null>(null);
   const [query, setQuery] = useState("");
   const [backupNote, setBackupNote] = useState(DEFAULT_BACKUP_NOTE);
@@ -156,30 +167,39 @@ function App() {
   const [selectedProcessTemplateCategories, setSelectedProcessTemplateCategories] = useState<ProcessTemplateCategoryId[]>(
     savedProcessTemplateCategories,
   );
+  const [selectedSwitchStationTemplateCategories, setSelectedSwitchStationTemplateCategories] = useState<ProcessTemplateCategoryId[]>(
+    savedSwitchStationTemplateCategories,
+  );
   const [isProcessInfoModalOpen, setIsProcessInfoModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingProcess, setIsGeneratingProcess] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-
+ 
   const filteredRecords = useMemo(() => {
+    let result = records;
+    if (showOnlySelected) {
+      result = result.filter((record) => selectedCodes.includes(record.archiveCode));
+    }
     const keyword = query.trim().toLowerCase();
     if (!keyword) {
-      return records;
+      return result;
     }
-
-    return records.filter((record) =>
+ 
+    return result.filter((record) =>
       [record.archiveCode, record.fullTitle, record.filingUnit, record.retentionPeriod]
         .join(" ")
         .toLowerCase()
         .includes(keyword),
     );
-  }, [query, records]);
+  }, [query, records, showOnlySelected, selectedCodes]);
 
   const shouldGenerateDocx = generateCover || generateNote || generateSpine;
   const canGenerate = selectedCodes.length > 0 && actualOutputDir && (shouldGenerateDocx || generateCatalogWorkbook);
   const canGenerateProcess =
     selectedCodes.length > 0 && Boolean(actualOutputDir) && selectedProcessTemplateCategories.length > 0 && !isGeneratingProcess;
+  const canGenerateSwitchStation =
+    selectedCodes.length > 0 && Boolean(actualOutputDir) && selectedSwitchStationTemplateCategories.length > 0 && !isGeneratingProcess;
   const previewIndex = previewRecord
     ? filteredRecords.findIndex((record) => record.archiveCode === previewRecord.archiveCode)
     : -1;
@@ -216,6 +236,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem(PROCESS_TEMPLATE_CATEGORIES_KEY, JSON.stringify(selectedProcessTemplateCategories));
   }, [selectedProcessTemplateCategories]);
+
+  useEffect(() => {
+    localStorage.setItem(SWITCH_STATION_TEMPLATE_CATEGORIES_KEY, JSON.stringify(selectedSwitchStationTemplateCategories));
+  }, [selectedSwitchStationTemplateCategories]);
 
   async function chooseExcel() {
     const selected = await open({
@@ -342,6 +366,12 @@ function App() {
     );
   }
 
+  function toggleSwitchStationTemplateCategory(categoryId: ProcessTemplateCategoryId) {
+    setSelectedSwitchStationTemplateCategories((current) =>
+      current.includes(categoryId) ? current.filter((id) => id !== categoryId) : [...current, categoryId],
+    );
+  }
+
   async function generate() {
     if (!canGenerate) {
       return;
@@ -400,8 +430,9 @@ function App() {
     }
   }
 
-  async function generateProcess() {
-    if (!canGenerateProcess) {
+  async function generateProcess(templateModule: ProcessTemplateModule = "process") {
+    const isSwitchStation = templateModule === "switch-station";
+    if (isSwitchStation ? !canGenerateSwitchStation : !canGenerateProcess) {
       return;
     }
 
@@ -413,7 +444,8 @@ function App() {
         {
           selectedCodes,
           outputDir: actualOutputDir,
-          selectedTemplateCategories: selectedProcessTemplateCategories,
+          selectedTemplateCategories: isSwitchStation ? selectedSwitchStationTemplateCategories : selectedProcessTemplateCategories,
+          templateModule,
           userFields: {
             projectName: processProjectName.trim(),
             generalContractorUnit: processGeneralContractorUnit.trim(),
@@ -432,7 +464,7 @@ function App() {
       );
       const skippedText = result.skipped.length > 0 ? `\n跳过 ${result.skipped.length} 条：\n${result.skipped.slice(0, 12).join("\n")}` : "";
       const errorText = result.errors.length > 0 ? `\n失败 ${result.errors.length} 个：\n${result.errors.slice(0, 12).join("\n")}` : "";
-      await showDialogMessage(`过程资料生成完成：${result.files.length} 个文件。${skippedText}${errorText}`, {
+      await showDialogMessage(`${isSwitchStation ? "开关站电气设备安装（子单位工程）" : "过程资料"}生成完成：${result.files.length} 个文件。${skippedText}${errorText}`, {
         title: result.errors.length > 0 ? "生成完成" : "生成成功",
         kind: result.errors.length > 0 ? "warning" : "info",
       });
@@ -465,7 +497,12 @@ function App() {
       <div className="pane-title">
         <div>
           <h2>案卷列表</h2>
-          <p>{filteredRecords.length} 条匹配记录</p>
+          <p>
+            {filteredRecords.length} 条匹配记录
+            {selectedCodes.length > 0 ? (
+              <span className="selected-count-text">（已选择 {selectedCodes.length} 条记录）</span>
+            ) : null}
+          </p>
         </div>
         <label className="select-all">
           <input
@@ -476,10 +513,22 @@ function App() {
           全选
         </label>
       </div>
-      <label className="search-box">
-        <Search size={17} />
-        <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="搜索档号、题名、单位" />
-      </label>
+      <div className="record-pane-filter">
+        <label className="search-box">
+          <Search size={17} />
+          <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="搜索档号、题名、单位" />
+        </label>
+        {selectedCodes.length > 0 ? (
+          <label className="only-selected-toggle">
+            <input
+              type="checkbox"
+              checked={showOnlySelected}
+              onChange={(event) => setShowOnlySelected(event.currentTarget.checked)}
+            />
+            仅显示已选 ({selectedCodes.length})
+          </label>
+        ) : null}
+      </div>
       <div className="record-list">
         {filteredRecords.map((record) => (
           <div
@@ -522,6 +571,14 @@ function App() {
           <FolderTree size={17} />
           过程资料生成
         </button>
+        <button
+          className={`tab-button ${activeTab === SWITCH_STATION_TAB ? "active" : ""}`}
+          onClick={() => setActiveTab(SWITCH_STATION_TAB)}
+          type="button"
+        >
+          <FolderTree size={17} />
+          开关站电气设备安装（子单位工程）
+        </button>
         <button className="secondary-button update-button tab-update-button" onClick={checkForUpdates} disabled={isCheckingUpdate} title="检查更新">
           {isCheckingUpdate ? <Loader2 className="spin" size={15} /> : <RefreshCw size={15} />}
           更新
@@ -558,7 +615,7 @@ function App() {
                 <div className="generation-actions">
                   <button className="generate-button" onClick={generate} disabled={!canGenerate || isGenerating}>
                     {isGenerating ? <Loader2 className="spin" size={18} /> : <FileText size={18} />}
-                    生成文件
+                    生成文件 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />
@@ -616,9 +673,69 @@ function App() {
                   </div>
                 </div>
                 <div className="generation-actions">
-                  <button className="generate-button" onClick={generateProcess} disabled={!canGenerateProcess}>
+                  <button className="generate-button" onClick={() => generateProcess("process")} disabled={!canGenerateProcess}>
                     {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
-                    生成过程资料
+                    生成过程资料 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
+                  </button>
+                  <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
+                    <FolderOpen size={18} />
+                    打开输出目录
+                  </button>
+                </div>
+              </div>
+            </section>
+          </section>
+        </section>
+      ) : null}
+
+      {activeTab === SWITCH_STATION_TAB ? (
+        <section className="tab-panel">
+          {controlBand}
+
+          <section className="workspace">
+            {recordPane}
+
+            <section className="detail-pane">
+              <div className="tool-section">
+                <div className="section-heading">
+                  <FolderTree size={19} />
+                  <h2>开关站电气设备安装（子单位工程）</h2>
+                </div>
+                <div className="process-info-actions">
+                  <button className="secondary-button process-info-button" type="button" onClick={() => setIsProcessInfoModalOpen(true)}>
+                    <SlidersHorizontal size={17} />
+                    填写生成信息
+                  </button>
+                </div>
+                <div className="process-template-section">
+                  <div className="template-section-heading">
+                    <span>生成模板</span>
+                    <div className="mini-actions">
+                      <button type="button" onClick={() => setSelectedSwitchStationTemplateCategories([...PROCESS_TEMPLATE_CATEGORY_IDS])}>
+                        全选
+                      </button>
+                      <button type="button" onClick={() => setSelectedSwitchStationTemplateCategories([])}>
+                        清空
+                      </button>
+                    </div>
+                  </div>
+                  <div className="process-template-grid">
+                    {PROCESS_TEMPLATE_CATEGORIES.map((category) => (
+                      <label key={category.id} className="template-check">
+                        <input
+                          type="checkbox"
+                          checked={selectedSwitchStationTemplateCategories.includes(category.id)}
+                          onChange={() => toggleSwitchStationTemplateCategory(category.id)}
+                        />
+                        <span>{category.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="generation-actions">
+                  <button className="generate-button" onClick={() => generateProcess("switch-station")} disabled={!canGenerateSwitchStation}>
+                    {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
+                    生成开关站资料 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />

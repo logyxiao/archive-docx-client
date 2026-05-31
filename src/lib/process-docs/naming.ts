@@ -18,6 +18,19 @@ function outputTitle(template: ProcessTemplate, title: string): string {
     .replace(/\s*质量(?:报验申请|报审表)及验收记录\s*$/, "")
     .replace(/[，,。；;：:\s]+$/g, "")
     .trim();
+  const hiddenWorkStem = cleanTitle
+    .replace(/\s*隐蔽工程报验申请及质量验收记录\s*$/, "")
+    .replace(/\s*隐蔽工程质量报验单及隐蔽工程质量验收记录\s*$/, "")
+    .replace(/[，,。；;：:\s]+$/g, "")
+    .trim();
+
+  if (template.kind === "docx" && template.templateFile === "隐蔽工程质量报验单.docx") {
+    return `${stripProjectPrefix(hiddenWorkStem)}隐蔽工程质量报验单`;
+  }
+
+  if (template.kind === "xlsx" && template.originalName.includes("隐蔽工程质量验收记录")) {
+    return `${stripProjectPrefix(hiddenWorkStem)}隐蔽工程质量验收记录`;
+  }
 
   if (template.kind === "docx" && template.originalName.includes("报验申请单")) {
     return `${stripProjectPrefix(acceptanceStem)}报验申请单`;
@@ -29,6 +42,18 @@ function outputTitle(template: ProcessTemplate, title: string): string {
 
   if (template.kind === "xlsx" && template.originalName.includes("质量验收记录")) {
     return `${stripProjectPrefix(acceptanceStem)}${template.originalName.includes("汇总用") ? "质量验收记录（汇总用）" : "质量验收记录"}`;
+  }
+
+  if (template.kind === "xlsx" && /质量(?:检查)?验收评定表/.test(template.originalName)) {
+    return `${stripProjectPrefix(acceptanceStem)}${template.originalName.includes("检查验收评定表") ? "质量检查验收评定表" : "质量验收评定表"}`;
+  }
+
+  if (template.kind === "xlsx" && template.originalName.includes("质量验收表") && cleanTitle.includes("分项工程验收记录")) {
+    return stripProjectPrefix(cleanTitle).replace(/\s*分项工程验收记录\s*$/, "分项工程质量验收表");
+  }
+
+  if (template.kind === "xlsx" && template.originalName.includes("质量验收表")) {
+    return `${stripProjectPrefix(acceptanceStem)}质量验收表`;
   }
 
   return cleanTitle;

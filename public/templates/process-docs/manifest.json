@@ -217,6 +217,321 @@
       "originalName": "41、5028G01-SG-ZHHC-01-03-02-01-001钢结构（墙架、檩条、支撑系统）组装工程检验批质量验收记录1#厂房.xlsx",
       "templateFile": "厂房墙架檩条支撑系统组装工程检验批质量验收记录.xlsx",
       "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 2,
+      "kind": "xlsx",
+      "originalName": "2、5028G01-SG-ZHHC-03-001高明分布式项目 开关站电气设备安装子单位工程质量验收记录（汇总用）.xlsx",
+      "templateFile": "开关站电气设备安装子单位工程质量验收记录（汇总用）.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 4,
+      "kind": "xlsx",
+      "originalName": "4、5028G01-SG-ZHHC-03-01-001高明分布式项目 地基与基础工程分部工程质量验收记录（汇总用）.xlsx",
+      "templateFile": "地基与基础工程分部工程质量验收记录（汇总用）.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 5,
+      "kind": "xlsx",
+      "originalName": "5、5028G01-SG-ZHHC-03-01-01-001定位及高程控制分项工程质量验收记录.xlsx",
+      "templateFile": "定位及高程控制分项工程质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 6,
+      "kind": "xlsx",
+      "originalName": "6、5028G01-SG-ZHHC-03-01-01-01-001定位放线工程检验批质量验收记录.xlsx",
+      "templateFile": "定位放线工程检验批质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 7,
+      "kind": "xlsx",
+      "originalName": "7、5028G01-SG-ZHHC-03-01-02-001土方分项工程质量验收记录.xlsx",
+      "templateFile": "土方分项工程质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 8,
+      "kind": "xlsx",
+      "originalName": "8、开关柜箱式变压器基础土方开挖检验批质量验收记录.xlsx",
+      "templateFile": "土方开挖检验批质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 9,
+      "kind": "xlsx",
+      "originalName": "9、开关柜箱式变压器基础土方回填检验批质量验收记录.xlsx",
+      "templateFile": "土方回填检验批质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 10,
+      "kind": "xlsx",
+      "originalName": "10、开关柜箱式变压器基础场地平整工程检验批质量验收记录.xlsx",
+      "templateFile": "场地平整检验批质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 11,
+      "kind": "xlsx",
+      "originalName": "11、5028G01-SG-ZHHC-03-01-03-001垫层分项工程质量验收记录.xlsx",
+      "templateFile": "垫层分项工程质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 12,
+      "kind": "xlsx",
+      "originalName": "12、5028G01-SG-ZHHC-03-01-03-01-001水泥混凝土垫层和陶粒土垫层检验批质量验收记录.xlsx",
+      "templateFile": "水泥混凝土垫层和陶粒土垫层检验批质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 13,
+      "kind": "xlsx",
+      "originalName": "13、5028G01-SG-ZHHC-03-01-04-001基础模板分项工程质量验收记录.xlsx",
+      "templateFile": "基础模板分项工程质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 14,
+      "kind": "xlsx",
+      "originalName": "14、5028G01-SG-ZHHC-03-01-04-01-001现浇混凝土模板安装工程检验批质量验收记录.xlsx",
+      "templateFile": "现浇混凝土模板安装工程检验批质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 15,
+      "kind": "docx",
+      "originalName": "15、5028G01-SG-ZHHC-03-01-04-YB-001隐蔽工程质量报验单.docx",
+      "templateFile": "隐蔽工程质量报验单.docx",
+      "outputExtension": ".docx"
+    },
+    {
+      "sequence": 15,
+      "kind": "xlsx",
+      "originalName": "15、5028G01-SG-ZHHC-03-01-04-YB-001模板拆除隐蔽工程质量验收记录.xlsx",
+      "templateFile": "模板拆除隐蔽工程质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 16,
+      "kind": "xlsx",
+      "originalName": "16、5028G01-SG-ZHHC-03-01-05-001钢筋分项工程质量验收记录.xlsx",
+      "templateFile": "钢筋分项工程质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 17,
+      "kind": "xlsx",
+      "originalName": "17、5028G01-SG-ZHHC-03-01-05-01-001钢筋安装检验批质量验收记录.xlsx",
+      "templateFile": "钢筋安装检验批质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 18,
+      "kind": "xlsx",
+      "originalName": "18、5028G01-SG-ZHHC-03-01-05-YB-001钢筋隐蔽工程质量验收记录.xlsx",
+      "templateFile": "钢筋隐蔽工程质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 19,
+      "kind": "xlsx",
+      "originalName": "19、5028G01-SG-ZHHC-03-01-06-001混凝土分项工程质量验收记录.xlsx",
+      "templateFile": "混凝土分项工程质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 20,
+      "kind": "xlsx",
+      "originalName": "20、5028G01-SG-ZHHC-03-01-06-01-001混凝土施工检验批质量验收记录.xlsx",
+      "templateFile": "混凝土施工检验批质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 21,
+      "kind": "xlsx",
+      "originalName": "21、5028G01-SG-ZHHC-03-01-06-01-002现浇混凝土结构外观及尺寸偏差检验批质量验收记录.xlsx",
+      "templateFile": "现浇混凝土结构外观及尺寸偏差检验批质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 2,
+      "kind": "xlsx",
+      "originalName": "2、5028G01-SG-ZHHC-03-02-001开关站电气设备安装分部工程质量验收评定表.xlsx",
+      "templateFile": "开关站电气设备安装分部工程质量验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 3,
+      "kind": "xlsx",
+      "originalName": "3、5028G01-SG-ZHHC-03-02-01-001开关柜及附属设备安装分项工程质量验收评定表.xlsx",
+      "templateFile": "开关柜及附属设备安装分项工程质量验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 5,
+      "kind": "xlsx",
+      "originalName": "5、5028G01-SG-ZHHC-03-03-001控制、保护及交直流控制电源系统设备安装分部工程质量验收评定表.xlsx",
+      "templateFile": "控制保护及交直流控制电源系统设备安装分部工程质量验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 6,
+      "kind": "xlsx",
+      "originalName": "6、5028G01-SG-ZHHC-03-03-01-001控制及保护屏台的安装分项工程质量检查验收评定表.xlsx",
+      "templateFile": "控制及保护屏台的安装分项工程质量检查验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 7,
+      "kind": "xlsx",
+      "originalName": "7、5028G01-SG-ZHHC-03-03-02-001二次回路检查及控制电缆接线分项工程质量检查验收评定表.xlsx",
+      "templateFile": "二次回路检查及控制电缆接线分项工程质量检查验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 9,
+      "kind": "xlsx",
+      "originalName": "9、5028G01-SG-ZHHC-03-04-001交直流控制电源系统设备安装分部工程质量验收评定表.xlsx",
+      "templateFile": "交直流控制电源系统设备安装分部工程质量验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 10,
+      "kind": "xlsx",
+      "originalName": "10、5028G01-SG-ZHHC-03-04-01-001蓄电池安装分项工程质量检查验收评定表.xlsx",
+      "templateFile": "蓄电池安装分项工程质量检查验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 11,
+      "kind": "xlsx",
+      "originalName": "11、5028G01-SG-ZHHC-03-04-02-001UPS装置检查及带负荷试验分项工程质量检查验收评定表.xlsx",
+      "templateFile": "UPS装置检查及带负荷试验分项工程质量检查验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 13,
+      "kind": "xlsx",
+      "originalName": "13、5028G01-SG-ZHHC-03-05-001接地装置安装分部工程质量检查验收评定表.xlsx",
+      "templateFile": "接地装置安装分部工程质量检查验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 14,
+      "kind": "xlsx",
+      "originalName": "14、5028G01-SG-ZHHC-03-05-01-001屋外接地装置安装分项工程质量验收表.xlsx",
+      "templateFile": "屋外接地装置安装分项工程质量验收表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 15,
+      "kind": "xlsx",
+      "originalName": "15、5028G01-SG-ZHHC-03-05-02-001屋内接地装置安装分项工程质量验收表.xlsx",
+      "templateFile": "屋内接地装置安装分项工程质量验收表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 17,
+      "kind": "xlsx",
+      "originalName": "17、5028G01-SG-ZHHC-03-06-001计算机监控系统设备安装分部工程质量验收评定表.xlsx",
+      "templateFile": "计算机监控系统设备安装分部工程质量验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 18,
+      "kind": "xlsx",
+      "originalName": "18、5028G01-SG-ZHHC-03-06-01-001单个盘（台、箱、柜）安装分项工程质量检查验收评定表.xlsx",
+      "templateFile": "单个盘台箱柜安装分项工程质量检查验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 19,
+      "kind": "xlsx",
+      "originalName": "19、5028G01-SG-ZHHC-03-06-02-001监视设备安装分项工程质量检查验收评定表.xlsx",
+      "templateFile": "监视设备安装分项工程质量检查验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 20,
+      "kind": "xlsx",
+      "originalName": "20、5028G01-SG-ZHHC-03-06-03-001电缆支架、桥架、竖井制作及安装分项工程质量验收表.xlsx",
+      "templateFile": "电缆支架桥架竖井制作及安装分项工程质量验收表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 21,
+      "kind": "xlsx",
+      "originalName": "21、5028G01-SG-ZHHC-03-06-04-001电缆敷设分项工程质量检查验收评定表.xlsx",
+      "templateFile": "电缆敷设分项工程质量检查验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 22,
+      "kind": "xlsx",
+      "originalName": "22、5028G01-SG-ZHHC-03-06-04-002 #1光伏升压变 电缆构筑物及桥架内的电缆敷设分项工程质量验收表.xlsx",
+      "templateFile": "光伏升压变电缆敷设分项工程质量验收表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 24,
+      "kind": "xlsx",
+      "originalName": "24、5028G01-SG-ZHHC-03-06-04-004 开关柜G01柜电缆构筑物及桥架内的电缆敷设分项工程质量验收表.xlsx",
+      "templateFile": "开关柜电缆敷设分项工程质量验收表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 28,
+      "kind": "xlsx",
+      "originalName": "28、5028G01-SG-ZHHC-03-06-04-YB-001低压交流电缆隐蔽工程质量验收记录.xlsx",
+      "templateFile": "低压交流电缆隐蔽工程质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 30,
+      "kind": "xlsx",
+      "originalName": "30、5028G01-SG-ZHHC-AZ-006通讯系统设备安装分部工程质量验收评定表.xlsx",
+      "templateFile": "通讯系统设备安装分部工程质量验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 31,
+      "kind": "xlsx",
+      "originalName": "31、5028G01-SG-ZHHC-AZ-014通信系统一次设备安装分项工程质量检查验收评定表.xlsx",
+      "templateFile": "通信系统一次设备安装分项工程质量检查验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 32,
+      "kind": "xlsx",
+      "originalName": "32、配电柜手动分合闸检查记录.xlsx",
+      "templateFile": "配电柜手动分合闸检查记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 33,
+      "kind": "xlsx",
+      "originalName": "33、逆变器散热装置、人机界面检查记录.xlsx",
+      "templateFile": "逆变器散热装置人机界面检查记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 34,
+      "kind": "xlsx",
+      "originalName": "34、配电柜施工安装记录.xlsx",
+      "templateFile": "配电柜施工安装记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 35,
+      "kind": "xlsx",
+      "originalName": "35、配电柜安装接地检查记录.xlsx",
+      "templateFile": "配电柜安装接地检查记录.xlsx",
+      "outputExtension": ".xlsx"
     }
   ]
 }

@@ -56,6 +56,7 @@ export function subunitInspectionSubject(title: string): string {
 export function inspectionApplicationFullSubject(title: string): string {
   return stripProjectPrefix(title)
     .replace(/\s*质量(?:报验申请|报审表)及验收记录\s*$/, "")
+    .replace(/\s*验收记录\s*$/, "")
     .replace(/[，,。；;：:\s]+$/g, "")
     .trim();
 }

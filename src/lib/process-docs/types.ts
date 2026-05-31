@@ -1,6 +1,8 @@
 import type { GeneratedFile } from "../types";
 import type { ProcessTemplateCategoryId } from "./categories";
 
+export type ProcessTemplateModule = "process" | "switch-station";
+
 export interface ProcessTemplateManifest {
   templates: ProcessTemplate[];
 }
@@ -18,6 +20,7 @@ export interface GenerateProcessOptions {
   outputDir: string;
   userFields?: ProcessUserFields;
   selectedTemplateCategories?: ProcessTemplateCategoryId[];
+  templateModule?: ProcessTemplateModule;
 }
 
 export interface ProcessGenerationResult {

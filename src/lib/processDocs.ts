@@ -4,4 +4,4 @@ export { renderSummaryWorkbook } from "./process-docs/summaryWorkbookRenderer";
 export { renderProcessWorkbook } from "./process-docs/workbookRenderer";
 export { normalizeProcessTemplateCategories, PROCESS_TEMPLATE_CATEGORIES, PROCESS_TEMPLATE_CATEGORY_IDS } from "./process-docs/categories";
 export type { ProcessTemplateCategoryId } from "./process-docs/categories";
-export type { ProcessGenerationResult, ProcessUserFields } from "./process-docs/types";
+export type { ProcessGenerationResult, ProcessTemplateModule, ProcessUserFields } from "./process-docs/types";

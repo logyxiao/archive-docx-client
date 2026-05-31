@@ -67,8 +67,31 @@ function replaceDocxParagraphs(xml: string, record: ArchiveRecord, item: Archive
       nextParagraph = replaceUnderlinedTextInParagraph(nextParagraph, inspectionSubject);
     }
 
+    if (text.includes("工程已完成施工任务") && text.includes("现报请查验")) {
+      nextText = replaceHiddenWorkSubjectText(nextText, item.title);
+    }
+
     return nextText === text ? nextParagraph : replaceParagraphText(nextParagraph, nextText);
   });
+}
+
+function replaceHiddenWorkSubjectText(text: string, title: string): string {
+  const subject = hiddenWorkSubject(title);
+  if (!subject) {
+    return text;
+  }
+
+  return text.replace(/：\s*.*?\s*工程已完成施工任务/, `： ${subject} 工程已完成施工任务`);
+}
+
+function hiddenWorkSubject(title: string): string {
+  return title
+    .replace(/^\s*\d+[、.．\-\s]*/, "")
+    .replace(/^.*?项目\s*/, "")
+    .replace(/\s*隐蔽工程报验申请及质量验收记录\s*$/, "")
+    .replace(/\s*隐蔽工程质量报验单及隐蔽工程质量验收记录\s*$/, "")
+    .replace(/[，,。；;：:\s]+$/g, "")
+    .trim();
 }
 
 function paragraphText(paragraph: string): string {

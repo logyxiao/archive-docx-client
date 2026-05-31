@@ -746,3 +746,40 @@ h2 {
     transform: rotate(360deg);
   }
 }
+
+.record-pane-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.record-pane-filter .search-box {
+  margin: 0;
+}
+
+.selected-count-text {
+  color: #156b5f;
+  font-weight: 700;
+  font-size: 13px;
+  margin-left: 4px;
+}
+
+.only-selected-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #156b5f;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  align-self: flex-start;
+  user-select: none;
+}
+
+.only-selected-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: #156b5f;
+  margin: 0;
+}

@@ -1,11 +1,12 @@
 import type { ArchiveItem, ArchiveRecord } from "../types";
 import { isProcessTemplateCategorySelected, normalizeProcessTemplateCategories } from "./categories";
-import { PROCESS_OUTPUT_DIR } from "./constants";
+import { PROCESS_OUTPUT_DIR, SWITCH_STATION_OUTPUT_DIR } from "./constants";
 import { renderProcessDocx } from "./docxRenderer";
 import { processOutputName } from "./naming";
 import { renderSummaryWorkbook } from "./summaryWorkbookRenderer";
 import {
   getProcessRecordApplicability,
+  isRecordInTemplateModule,
   isSummaryWorkbookTemplate,
   loadProcessManifest,
   loadProcessTemplate,
@@ -21,8 +22,11 @@ export async function generateProcessDocs(
   writeFile: (path: string, bytes: Uint8Array) => Promise<void>,
 ): Promise<ProcessGenerationResult> {
   const manifest = await loadProcessManifest();
+  const templateModule = options.templateModule ?? "process";
   const selectedTemplateCategories = normalizeProcessTemplateCategories(options.selectedTemplateCategories);
-  const selected = records.filter((record) => options.selectedCodes.includes(record.archiveCode));
+  const selected = records.filter((record) =>
+    options.selectedCodes.includes(record.archiveCode) && isRecordInTemplateModule(record, templateModule),
+  );
   const files: ProcessGenerationResult["files"] = [];
   const skipped: string[] = [];
   const errors: string[] = [];
@@ -35,12 +39,12 @@ export async function generateProcessDocs(
     }
 
     const recordOutputDir = joinPath(
-      joinPath(options.outputDir, PROCESS_OUTPUT_DIR),
+      joinPath(options.outputDir, templateModule === "switch-station" ? SWITCH_STATION_OUTPUT_DIR : PROCESS_OUTPUT_DIR),
       sanitizeFileName(record.archiveCode + record.fullTitle),
     );
 
     for (const item of record.items) {
-      const allTemplates = matchingTemplatesByTitle(item, manifest.templates);
+      const allTemplates = matchingTemplatesByTitle(item, manifest.templates, templateModule);
       if (allTemplates.length === 0) {
         continue;
       }

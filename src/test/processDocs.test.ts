@@ -425,6 +425,33 @@ describe("process docs generation", () => {
     expect(sheet.getCell("T8").value).toBe("分包负责人");
     expect(sheet.getCell("AE8").value).toBe("支架安装");
     expect(sheet.getCell("B5").isMerged).toBe(true);
+
+    // Verify that the signature block at the bottom of the worksheet is untouched/blank
+    let totalSignatureRows = 0;
+    for (const sheet of workbook.worksheets) {
+      let signatureRows = 0;
+      let inSig = false;
+      for (let r = 1; r <= sheet.rowCount; r++) {
+        const row = sheet.getRow(r);
+        if (!inSig) {
+          row.eachCell({ includeEmpty: false }, (cell) => {
+            if (cell.value && String(cell.value).includes("验收单位")) {
+              inSig = true;
+            }
+          });
+        }
+        if (inSig) {
+          signatureRows++;
+          totalSignatureRows++;
+          row.eachCell({ includeEmpty: false }, (cell) => {
+            const val = typeof cell.value === "string" ? cell.value : "";
+            expect(val).not.toContain("测试施工单位");
+            expect(val).not.toContain("测试总承包单位");
+          });
+        }
+      }
+    }
+    expect(totalSignatureRows).toBeGreaterThan(0);
   });
 
     it("leaves optional process fields blank when users do not fill them", async () => {
@@ -516,15 +543,18 @@ describe("process docs generation", () => {
     it("fills merged quality result values when templates use quality acceptance result columns", async () => {
     const item = processRecord.items[4];
     const template = readPublic("/templates/process-docs/厂房支架安装分项工程质量验收表.xlsx");
+    const sourceWorkbook = await workbookFrom(template);
+    const sourceValue = String(sourceWorkbook.worksheets[0].getCell("V21").value);
+
     const workbook = await workbookFrom(await renderProcessWorkbook(template, processRecord, item));
     const sheet = workbook.worksheets[0];
-    const values = String(sheet.getCell("V21").value)
-      .split(",")
-      .map((value) => Number(value));
+    const renderedValue = String(sheet.getCell("V21").value);
+    const values = renderedValue.split(",").map((value) => Number(value));
 
     expect(values).toHaveLength(10);
     expect(values.every((value) => Number.isFinite(value))).toBe(true);
     expect(values.every((value) => value >= 0 && value <= 2)).toBe(true);
+    expect(renderedValue).not.toBe(sourceValue); // Verify it actually overwrote the static value
   });
 
     it("distributes subitem quality acceptance values across upper-limit standards", async () => {
@@ -571,7 +601,22 @@ describe("process docs generation", () => {
     const renderedXml = await xlsxXml(rendered, "xl/worksheets/sheet1.xml");
 
     expect(renderedXml.match(/<pageMargins[^>]+>/)?.[0]).toBe(sourceXml.match(/<pageMargins[^>]+>/)?.[0]);
-    expect(renderedXml.match(/<pageSetup[^>]+>/)?.[0]).toContain('scale="100"');
+    expect(renderedXml.match(/<pageSetup[^>]+>/)?.[0]).not.toContain('scale="100"');
+  });
+
+    it("adds print areas to subitem quality workbooks", async () => {
+    const item = processRecord.items[4];
+    const template = readPublic("/templates/process-docs/厂房支架安装分项工程质量验收表.xlsx");
+    const rendered = await renderProcessWorkbook(template, processRecord, item);
+    const sourceWorkbookXml = await xlsxXml(template, "xl/workbook.xml");
+    const renderedWorkbookXml = await xlsxXml(rendered, "xl/workbook.xml");
+    const sourceSheetXml = await xlsxXml(template, "xl/worksheets/sheet1.xml");
+    const renderedSheetXml = await xlsxXml(rendered, "xl/worksheets/sheet1.xml");
+
+    expect(sourceWorkbookXml).not.toContain("_xlnm.Print_Area");
+    expect(renderedWorkbookXml).toContain("_xlnm.Print_Area");
+    expect(renderedSheetXml.match(/<pageMargins[^>]+>/)?.[0]).toBe(sourceSheetXml.match(/<pageMargins[^>]+>/)?.[0]);
+    expect(renderedSheetXml.match(/<pageSetup[^>]+>/)?.[0]).not.toContain('scale="100"');
   });
   });
 
