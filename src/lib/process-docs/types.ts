@@ -1,7 +1,7 @@
 import type { GeneratedFile } from "../types";
 import type { ProcessTemplateCategoryId } from "./categories";
 
-export type ProcessTemplateModule = "process" | "switch-station";
+export type ProcessTemplateModule = "process" | "switch-station" | "collector-line";
 
 export interface ProcessTemplateManifest {
   templates: ProcessTemplate[];

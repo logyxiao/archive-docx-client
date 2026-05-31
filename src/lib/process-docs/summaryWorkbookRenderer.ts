@@ -1,5 +1,6 @@
 import PizZip from "pizzip";
 import type { ArchiveItem, ArchiveRecord } from "../types";
+import { collectorLineDivisionEvaluationItems } from "./collectorLine";
 import { resolveProcessFields } from "./fields";
 import {
   followingSwitchStationDivisionChildren,
@@ -34,10 +35,11 @@ export function renderSummaryWorkbook(
   let xml = sheet.asText();
   const isDivisionEvaluation = isDivisionEvaluationTemplate(processTemplate);
   const isSwitchStation = templateModule === "switch-station";
+  const isCollectorLine = templateModule === "collector-line";
   xml = setInlineStringCell(xml, "F4", archiveProjectCode(record.archiveCode));
   if (item) {
     xml = isDivisionEvaluation
-      ? fillDivisionEvaluationWorkbook(xml, record, item, isSwitchStation)
+      ? fillDivisionEvaluationWorkbook(xml, record, item, isSwitchStation, isCollectorLine)
       : isSubunitSummaryTemplate(processTemplate)
       ? fillSubunitQualityWorkbook(xml, record, item, processTemplate, contextRecords)
       : fillDivisionQualityWorkbook(xml, record, item, isSwitchStation);
@@ -119,17 +121,27 @@ function fillDivisionQualityWorkbook(xml: string, record: ArchiveRecord, item: A
   return nextXml;
 }
 
-function fillDivisionEvaluationWorkbook(xml: string, record: ArchiveRecord, item: ArchiveItem, isSwitchStation = false): string {
-  const summary = divisionQualitySummary(record, item, isSwitchStation);
+function fillDivisionEvaluationWorkbook(
+  xml: string,
+  record: ArchiveRecord,
+  item: ArchiveItem,
+  isSwitchStation = false,
+  isCollectorLine = false,
+): string {
+  const collectorItems = isCollectorLine ? collectorLineDivisionEvaluationItems() : undefined;
+  const summaryItems = isCollectorLine ? undefined : divisionQualitySummary(record, item, isSwitchStation).items;
   let nextXml = xml;
 
   for (let index = 0; index < 15; index += 1) {
     const row = 7 + index;
-    const part = summary.items[index];
-    nextXml = setInlineStringCell(nextXml, `B${row}`, part ? String(index + 1) : "");
-    nextXml = setInlineStringCell(nextXml, `D${row}`, part?.name ?? (index === summary.items.length ? "以下空白" : ""));
-    nextXml = setInlineStringCell(nextXml, `T${row}`, part ? "主要" : "");
-    nextXml = setInlineStringCell(nextXml, `W${row}`, part ? "合格" : "");
+    const collectorPart = collectorItems?.[index];
+    const summaryPart = summaryItems?.[index];
+    const name = collectorPart?.name ?? summaryPart?.name;
+    const totalItems = collectorItems?.length ?? summaryItems?.length ?? 0;
+    nextXml = setInlineStringCell(nextXml, `B${row}`, name ? String(index + 1) : "");
+    nextXml = setInlineStringCell(nextXml, `D${row}`, name ?? (index === totalItems ? "以下空白" : ""));
+    nextXml = setInlineStringCell(nextXml, `T${row}`, name ? (collectorPart?.nature ?? "主要") : "");
+    nextXml = setInlineStringCell(nextXml, `W${row}`, name ? (collectorPart?.grade ?? "合格") : "");
     nextXml = setInlineStringCell(nextXml, `AC${row}`, "");
   }
 

@@ -532,6 +532,97 @@
       "originalName": "35、配电柜安装接地检查记录.xlsx",
       "templateFile": "配电柜安装接地检查记录.xlsx",
       "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 1,
+      "kind": "docx",
+      "originalName": "1、5028G01-SG-ZHHC-KG-15高明分布式项目 集电线路安装工程分部开工报审.docx",
+      "templateFile": "集电线路安装工程分部开工报审.docx",
+      "outputExtension": ".docx"
+    },
+    {
+      "sequence": 2,
+      "kind": "docx",
+      "originalName": "2、5028G01-SG-ZHHC-03-08-001集电线路安装工程分部（子分部）工程报验申请单.docx",
+      "templateFile": "集电线路安装工程分部工程报验申请单.docx",
+      "outputExtension": ".docx"
+    },
+    {
+      "sequence": 2,
+      "kind": "xlsx",
+      "originalName": "2、5028G01-SG-ZHHC-03-08-001集电线路安装工程分部工程质量验收评定表.xlsx",
+      "templateFile": "集电线路安装工程分部工程质量验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 3,
+      "kind": "docx",
+      "originalName": "3、5028G01-SG-ZHHC-03-08-01-001直埋电缆敷设分项工程报验申请单.docx",
+      "templateFile": "直埋电缆敷设分项工程报验申请单.docx",
+      "outputExtension": ".docx"
+    },
+    {
+      "sequence": 4,
+      "kind": "xlsx",
+      "originalName": "4、高明分布式项目 直埋电缆敷设资料 表5.0.5 （00909A-00909B）电缆带电试运签证.xlsx",
+      "templateFile": "电缆带电试运签证.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 7,
+      "kind": "docx",
+      "originalName": "7、5028G01-SG-ZHHC-03-08-01-YB-001直埋电缆敷设施工隐蔽工程质量报验单.docx",
+      "templateFile": "直埋电缆敷设施工隐蔽工程质量报验单.docx",
+      "outputExtension": ".docx"
+    },
+    {
+      "sequence": 7,
+      "kind": "xlsx",
+      "originalName": "7、高明分布式项目 直埋电缆敷设资料 表7.1.9电缆工程电缆沟开挖及回填工程质量隐蔽验收记录.xlsx",
+      "templateFile": "电缆沟开挖及回填工程质量隐蔽验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 8,
+      "kind": "xlsx",
+      "originalName": "8、表5.0.3  高明分布式项目 #1杆1T1至G01柜601开关直埋电缆隐蔽前检查签证.xlsx",
+      "templateFile": "直埋电缆隐蔽前检查签证.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 12,
+      "kind": "docx",
+      "originalName": "12、5028G01-SG-ZHHC-03-08-02-001高压电缆终端制作安装分项工程报验申请单#1光伏升压变.docx",
+      "templateFile": "高压电缆终端制作安装分项工程报验申请单.docx",
+      "outputExtension": ".docx"
+    },
+    {
+      "sequence": 12,
+      "kind": "xlsx",
+      "originalName": "12、5028G01-SG-ZHHC-03-08-02-001高明分布式项目 电力电缆终端制作安装分项工程质量验收表#1光伏升压变.xlsx",
+      "templateFile": "电力电缆终端制作安装分项工程质量验收表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 18,
+      "kind": "docx",
+      "originalName": "18、5028G01-SG-ZHHC-03-08-03-001高明分布式项目 电力电缆中间接头制作安装分项工程报验申请单#1光伏升压变.docx",
+      "templateFile": "电力电缆中间接头制作安装分项工程报验申请单.docx",
+      "outputExtension": ".docx"
+    },
+    {
+      "sequence": 18,
+      "kind": "xlsx",
+      "originalName": "18、5028G01-SG-ZHHC-03-08-03-001高明分布式项目 电力电缆中间接头制作安装分项工程质量验收表#1光伏升压变.xlsx",
+      "templateFile": "电力电缆中间接头制作安装分项工程质量验收表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 24,
+      "kind": "xlsx",
+      "originalName": "24、表5.0.4  高明分布式项目 电缆中间接头位置记录.xlsx",
+      "templateFile": "电缆中间接头位置记录.xlsx",
+      "outputExtension": ".xlsx"
     }
   ]
 }

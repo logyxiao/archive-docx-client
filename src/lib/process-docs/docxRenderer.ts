@@ -1,5 +1,6 @@
 import PizZip from "pizzip";
 import type { ArchiveItem, ArchiveRecord } from "../types";
+import { collectorLineApplicationSubject } from "./collectorLine";
 import { switchStationApplicationSubject } from "./switchStation";
 import {
   inspectionApplicationSubject,
@@ -43,11 +44,17 @@ function replaceDocxParagraphs(
   const subunitSubject = subunitInspectionSubject(item.title);
   const inspectionSubject = templateModule === "switch-station"
     ? switchStationApplicationSubject(item.title)
+    : templateModule === "collector-line"
+      ? collectorLineApplicationSubject(item.title)
     : inspectionApplicationSubject(item.title);
   return xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
     const text = paragraphText(paragraph);
     let nextText = text;
     let nextParagraph = paragraph;
+
+    if (text.includes("工程开工报审表")) {
+      nextText = startReportTitle(item.title);
+    }
 
     if (item.fileCode && item.fileCode !== "/" && text.includes("编号：") && text.includes("5028G01")) {
       nextText = nextText.replace(/编号：.*$/, `编号：${item.fileCode}`);
@@ -87,6 +94,12 @@ function replaceDocxParagraphs(
 
     return nextText === text ? nextParagraph : replaceParagraphText(nextParagraph, nextText);
   });
+}
+
+function startReportTitle(title: string): string {
+  return title.includes("分部开工报审") || title.includes("分部工程开工报审")
+    ? "分部工程开工报审表"
+    : "单位工程开工报审表";
 }
 
 function replaceStartReportUnderlinedScope(paragraph: string, scope: string): string {

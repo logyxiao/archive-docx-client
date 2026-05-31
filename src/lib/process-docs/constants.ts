@@ -1,6 +1,7 @@
 export const PROCESS_TEMPLATE_ROOT = "/templates/process-docs";
 export const PROCESS_OUTPUT_DIR = "过程资料";
 export const SWITCH_STATION_OUTPUT_DIR = "开关站电气设备安装（子单位工程）";
+export const COLLECTOR_LINE_OUTPUT_DIR = "集电线路安装工程";
 
 export const PROJECT_NAME_PATTERNS = [
   /中核汇能高明创楷3\.58904MWp屋顶分布式光伏项目/g,

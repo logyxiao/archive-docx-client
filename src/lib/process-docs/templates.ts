@@ -1,5 +1,7 @@
 import type { ArchiveItem, ArchiveRecord } from "../types";
 import { PROCESS_RECORD_KEYWORDS, PROCESS_TEMPLATE_ROOT } from "./constants";
+import { collectorLineTemplatesForItem, isCollectorLineRecord, isCollectorLineTemplate } from "./collectorLine";
+import { isSwitchStationArchiveRecord } from "./switchStation";
 import type { ProcessTemplate, ProcessTemplateManifest, ProcessTemplateModule } from "./types";
 
 export async function loadProcessManifest(): Promise<ProcessTemplateManifest> {
@@ -35,6 +37,10 @@ export function matchingTemplatesByTitle(
 ): ProcessTemplate[] {
   const title = item.title;
   const activeTemplates = templates.filter((template) => isTemplateInModule(template, templateModule));
+  if (templateModule === "collector-line") {
+    return findByTemplateFiles(activeTemplates, collectorLineTemplatesForItem(item));
+  }
+
   if (isStartReportItemTitle(title)) {
     return findByTemplateFiles(activeTemplates, ["开工报审.docx"]);
   }
@@ -266,15 +272,25 @@ function firstMatchingTemplateFile(title: string, pairs: Array<[string, string]>
 }
 
 export function isTemplateInModule(template: ProcessTemplate, templateModule: ProcessTemplateModule): boolean {
-  return templateModule === "switch-station"
-    ? COMMON_PROCESS_TEMPLATE_FILES.has(template.templateFile) || isSwitchStationTemplate(template)
-    : !isSwitchStationTemplate(template);
+  if (templateModule === "switch-station") {
+    return COMMON_PROCESS_TEMPLATE_FILES.has(template.templateFile) || isSwitchStationTemplate(template);
+  }
+  if (templateModule === "collector-line") {
+    return COMMON_PROCESS_TEMPLATE_FILES.has(template.templateFile) || isCollectorLineTemplate(template);
+  }
+  return !isSwitchStationTemplate(template) && !isCollectorLineTemplate(template);
 }
 
 export function isRecordInTemplateModule(record: ArchiveRecord, templateModule: ProcessTemplateModule): boolean {
-  const isSwitchStationRecord = record.archiveCode.includes("-8341-") || record.archiveCode.includes("-8342-")
-    || record.fullTitle.includes("开关站电气设备安装");
-  return templateModule === "switch-station" ? isSwitchStationRecord : !isSwitchStationRecord;
+  const isSwitchStationRecord = isSwitchStationArchiveRecord(record);
+  const isCollectorRecord = isCollectorLineRecord(record);
+  if (templateModule === "switch-station") {
+    return isSwitchStationRecord;
+  }
+  if (templateModule === "collector-line") {
+    return isCollectorRecord;
+  }
+  return !isSwitchStationRecord && !isCollectorRecord;
 }
 
 function isSwitchStationTemplate(template: ProcessTemplate): boolean {

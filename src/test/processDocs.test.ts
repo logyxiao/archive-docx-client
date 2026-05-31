@@ -6,6 +6,7 @@ import { generateProcessDocs, renderProcessDocx, renderProcessWorkbook, renderSu
 import type { ArchiveRecord } from "../lib/types";
 
 const processRecord = createProcessRecord();
+const collectorLineRecord = createCollectorLineRecord();
 
 function readPublic(path: string): Buffer {
   return readFileSync(`public${decodeURIComponent(path)}`);
@@ -39,6 +40,22 @@ async function workbookFrom(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
 async function xlsxXml(bytes: Uint8Array, path: string): Promise<string> {
   const zip = await JSZip.loadAsync(bytes);
   return zip.file(path)!.async("string");
+}
+
+function cellText(cell: ExcelJS.Cell): string {
+  const value = cell.value;
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+  if (value && typeof value === "object") {
+    if ("text" in value && typeof value.text === "string") {
+      return value.text;
+    }
+    if ("richText" in value && Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text).join("");
+    }
+  }
+  return "";
 }
 
 describe("process docs generation", () => {
@@ -121,6 +138,59 @@ describe("process docs generation", () => {
       expect(xml).toContain("<w:u w:val=\"single\"/></w:rPr><w:t xml:space=\"preserve\"> 测试工程 光伏方阵安装子单位工程 </w:t>");
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
+    });
+
+    it("uses a division start-report title when the source title is a division start report", async () => {
+      stubProcessFetch();
+      const startReportRecord: ArchiveRecord = {
+        ...processRecord,
+        items: [
+          {
+            ...processRecord.items[4],
+            sequence: "5",
+            fileCode: "5028G01-SG-ZHHC-KG-99",
+            title: "高明分布式项目 子方阵支架及组件安装分部工程开工报审",
+          },
+        ],
+      };
+      const written: Uint8Array[] = [];
+
+      await generateProcessDocs(
+        [startReportRecord],
+        {
+          selectedCodes: [startReportRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          selectedTemplateCategories: ["start-report"],
+        },
+        async (_path, bytes) => {
+          written.push(bytes);
+        },
+      );
+      const xml = await docxXml(written[0]);
+
+      expect(xml).toContain("分部工程开工报审表");
+      expect(xml).not.toContain("单位工程开工报审表");
+    });
+
+    it("keeps a unit start-report title when the source title is not a division start report", async () => {
+      stubProcessFetch();
+      const written: Uint8Array[] = [];
+
+      await generateProcessDocs(
+        [processRecord],
+        {
+          selectedCodes: [processRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          selectedTemplateCategories: ["start-report"],
+        },
+        async (_path, bytes) => {
+          written.push(bytes);
+        },
+      );
+      const xml = await docxXml(written[0]);
+
+      expect(xml).toContain("单位工程开工报审表");
+      expect(xml).not.toContain("分部工程开工报审表");
     });
 
     it("uses the shared subunit quality workbook when the item title matches quality acceptance text", async () => {
@@ -375,6 +445,165 @@ describe("process docs generation", () => {
     expect(result.skipped).toEqual(["5028G01-0011-813-001：不适用过程资料模板（未匹配过程资料关键词）"]);
     expect(result.errors).toEqual([]);
   });
+
+    it("does not generate collector-line records from the regular process module", async () => {
+      stubProcessFetch();
+
+      const result = await generateProcessDocs(
+        [collectorLineRecord],
+        {
+          selectedCodes: [collectorLineRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          templateModule: "process",
+        },
+        async () => {},
+      );
+
+      expect(result.files).toEqual([]);
+      expect(result.skipped).toEqual([]);
+      expect(result.errors).toEqual([]);
+    });
+
+    it("generates collector-line templates only in the collector-line module", async () => {
+      stubProcessFetch();
+      const paths: string[] = [];
+
+      const result = await generateProcessDocs(
+        [collectorLineRecord],
+        {
+          selectedCodes: [collectorLineRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          templateModule: "collector-line",
+        },
+        async (path) => {
+          paths.push(path);
+        },
+      );
+      const names = fileNames(paths);
+
+      expect(result.files).toHaveLength(38);
+      expect(names.filter((name) => name.endsWith(".docx"))).toHaveLength(16);
+      expect(names.filter((name) => name.endsWith(".xlsx"))).toHaveLength(22);
+      expect(paths.every((path) => path.includes("/集电线路安装工程/5028G01-0011-8331-001"))).toBe(true);
+      expect(names.some((name) => name.includes("集电线路安装工程分部开工报审"))).toBe(true);
+      expect(names.some((name) => name.includes("电缆带电试运签证"))).toBe(true);
+      expect(names.some((name) => name.includes("电力电缆终端制作安装分项工程质量验收表"))).toBe(true);
+      expect(names.some((name) => name.includes("电力电缆中间接头制作安装分项工程质量验收表"))).toBe(true);
+      expect(names.some((name) => name.includes("附件（照片）"))).toBe(false);
+      expect(names.some((name) => name.toLowerCase().endsWith(".pdf"))).toBe(false);
+      expect(names.some((name) => name.includes("AZ-025"))).toBe(false);
+      expect(result.skipped).toEqual([]);
+      expect(result.errors).toEqual([]);
+    });
+
+    it("uses the shared start-report template for collector-line start reports", async () => {
+      stubProcessFetch();
+      const written: Uint8Array[] = [];
+
+      const result = await generateProcessDocs(
+        [collectorLineRecord],
+        {
+          selectedCodes: [collectorLineRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          templateModule: "collector-line",
+          selectedTemplateCategories: ["start-report"],
+        },
+        async (_path, bytes) => {
+          written.push(bytes);
+        },
+      );
+      const xml = await docxXml(written[0]);
+      const paragraphs = Array.from(xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)).map((match) => match[0]);
+      const headerParagraphs = paragraphs.filter((paragraph) => paragraph.includes("工程名称：") || paragraph.includes("编号："));
+
+      expect(result.files).toHaveLength(1);
+      expect(headerParagraphs).toHaveLength(1);
+      expect(headerParagraphs[0]).toContain("工程名称：中核汇能高明创楷3.58904MWp屋顶分布式光伏项目");
+      expect(headerParagraphs[0]).toContain("编号：5028G01-SG-ZHHC-KG-15");
+      expect(xml).toContain("开工报审表");
+      expect(xml).toContain("致：");
+    });
+
+    it("calibrates collector-line shared xlsx workbook content from source items", async () => {
+      stubProcessFetch();
+      const written: Array<{ path: string; bytes: Uint8Array }> = [];
+
+      const result = await generateProcessDocs(
+        [collectorLineRecord],
+        {
+          selectedCodes: [collectorLineRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          templateModule: "collector-line",
+        },
+        async (path, bytes) => {
+          written.push({ path, bytes });
+        },
+      );
+      const workbookByName = async (nameIncludes: string) => {
+        const entry = written.find((item) => item.path.includes(nameIncludes) && item.path.endsWith(".xlsx"));
+        expect(entry?.path).toBeTruthy();
+        return workbookFrom(entry!.bytes);
+      };
+
+      const trial5 = await workbookByName("01315A-01315B");
+      expect(trial5.worksheets[0].name).toContain("01315A-01315B");
+      expect(cellText(trial5.worksheets[0].getCell("B2"))).toContain("01315A-01315B");
+      expect(cellText(trial5.worksheets[0].getCell("B2"))).not.toContain("00909A-00909B");
+
+      const trial6 = await workbookByName("01316A-01316B");
+      expect(trial6.worksheets[0].name).toContain("01316A-01316B");
+      expect(cellText(trial6.worksheets[0].getCell("B2"))).toContain("01316A-01316B");
+
+      const hidden9 = await workbookByName("G01柜601开关至G03柜602开关");
+      expect(String(hidden9.worksheets[0].getCell("N8").value)).toBe("10KV广东创楷建设工程有限公司配电专用箱变G01柜601开关至10KV创楷光伏开关站G03柜602开关");
+      const hidden10 = await workbookByName("G01柜801开关至G08柜605开关");
+      expect(String(hidden10.worksheets[0].getCell("N8").value)).toBe("10KV创楷#1光伏升压变G01柜801开关至10KV创楷光伏开关站G08柜605开关");
+      const hidden11 = await workbookByName("G01柜801开关至G09柜606开关");
+      expect(String(hidden11.worksheets[0].getCell("N8").value)).toBe("10KV创楷#2光伏升压变G01柜801开关至10KV创楷光伏开关站G09柜606开关");
+
+      const terminal12 = await workbookByName("03-08-02-001");
+      expect(terminal12.worksheets[0].getCell("F6").value).toBe("10KV创楷#1光伏升压变");
+      const terminal14 = await workbookByName("03-08-02-003");
+      expect(terminal14.worksheets[0].getCell("F6").value).toBe("10KV创楷光伏开关柜G01柜");
+      const joint19 = await workbookByName("03-08-03-002");
+      expect(joint19.worksheets[0].getCell("F6").value).toBe("10KV创楷#2光伏升压变");
+      const joint20 = await workbookByName("03-08-03-003");
+      expect(joint20.worksheets[0].getCell("F6").value).toBe("10KV创楷光伏开关柜G01柜");
+
+      expect(result.files).toHaveLength(38);
+      expect(result.errors).toEqual([]);
+    });
+
+    it("summarizes collector-line division evaluation workbooks by template groups", async () => {
+      stubProcessFetch();
+      const written: Array<{ path: string; bytes: Uint8Array }> = [];
+
+      await generateProcessDocs(
+        [collectorLineRecord],
+        {
+          selectedCodes: [collectorLineRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          templateModule: "collector-line",
+          selectedTemplateCategories: ["division-quality-acceptance"],
+        },
+        async (path, bytes) => {
+          written.push({ path, bytes });
+        },
+      );
+      const summaryEntry = written.find((item) => item.path.includes("集电线路安装工程分部工程质量验收评定表"));
+      expect(summaryEntry?.path).toBeTruthy();
+      const workbook = await workbookFrom(summaryEntry!.bytes);
+      const sheet = workbook.worksheets[0];
+
+      expect(sheet.getCell("D7").value).toBe("直埋电缆敷设");
+      expect(sheet.getCell("D8").value).toBe("高压电缆终端制作安装");
+      expect(sheet.getCell("D9").value).toBe("电力电缆中间接头制作安装");
+      expect(sheet.getCell("D10").value).toBe("以下空白");
+      expect(sheet.getCell("D11").value ?? "").toBe("");
+      expect(sheet.getCell("T7").value).toBe("主要");
+      expect(sheet.getCell("W9").value).toBe("合格");
+    });
+
   });
 
   describe("docx rendering", () => {
@@ -701,6 +930,67 @@ function createProcessRecord(): ArchiveRecord {
     drawingPages: 0,
     textPages: 94,
     items,
+  };
+}
+
+function createCollectorLineRecord(): ArchiveRecord {
+  const item = (
+    sequence: number,
+    fileCode: string,
+    title: string,
+    fileDate = "20250501",
+    pageNo: string | number = sequence,
+  ) => ({
+    sequence: String(sequence),
+    fileCode,
+    owner: "中核华辰建筑工程有限公司",
+    title,
+    fileDate,
+    pageNo: String(pageNo),
+    note: "",
+  });
+
+  return {
+    categoryCode: "8331",
+    archiveCode: "5028G01-0011-8331-001",
+    fullTitle: "中核汇能高明创楷3.58904MWp屋顶分布式光伏项目 集电线路安装工程分部开工报审，分项及隐蔽质量验收记录文件",
+    projectName: "中核汇能高明创楷3.58904MWp屋顶分布式光伏项目",
+    volumeTitle: "集电线路安装工程分部开工报审，分项及隐蔽质量验收记录文件",
+    owner: "中核华辰建筑工程有限公司",
+    filingUnit: "中核华辰建筑工程有限公司",
+    retentionPeriod: "30年",
+    startDate: "20250429",
+    endDate: "20250502",
+    dateRange: "20250429-20250502",
+    totalPages: 56,
+    drawingPages: 0,
+    textPages: 56,
+    items: [
+      item(1, "5028G01-SG-ZHHC-KG-15", "高明分布式项目 集电线路安装工程分部开工报审"),
+      item(2, "5028G01-SG-ZHHC-03-08-001", "高明分布式项目 集电线路安装工程分部工程质量报验申请及验收记录"),
+      item(3, "5028G01-SG-ZHHC-03-08-01-001", "高明分布式项目 直埋电缆敷设分项工程质量报验申请及验收记录"),
+      item(4, "/", "高明分布式项目 （00909A-00909B）电缆带电试运签证"),
+      item(5, "/", "高明分布式项目 （01315A-01315B)电缆带电试运签证"),
+      item(6, "/", "高明分布式项目 （01316A-01316B)电缆带电试运签证"),
+      item(7, "5028G01-SG-ZHHC-03-08-01-YB-001", "高明分布式项目 电缆工程电缆沟开挖及回填工程隐蔽报验申请及验收记录"),
+      item(8, "/", "高明分布式项目 #1杆1T1至G01柜601开关直埋电缆隐蔽前检查签证"),
+      item(9, "/", "高明分布式项目 G01柜601开关至G03柜602开关直埋电缆隐蔽前检查签证"),
+      item(10, "/", "高明分布式项目 G01柜801开关至G08柜605开关直埋电缆隐蔽前检查签证"),
+      item(11, "/", "高明分布式项目 G01柜801开关至G09柜606开关直埋电缆隐蔽前检查签证"),
+      item(12, "5028G01-SG-ZHHC-03-08-02-001", "高明分布式项目 #1光伏升压变 电力电缆终端制作安装分项工程质量报验申请及验收记录"),
+      item(13, "5028G01-SG-ZHHC-03-08-02-002", "高明分布式项目 #2光伏升压变 电力电缆终端制作安装分项工程质量报验申请及验收记录"),
+      item(14, "5028G01-SG-ZHHC-03-08-02-003", "高明分布式项目 开关柜G01柜 电力电缆终端制作安装分项工程质量报验申请及验收记录"),
+      item(15, "5028G01-SG-ZHHC-03-08-02-004", "高明分布式项目 开关柜G03柜 电力电缆终端制作安装分项工程质量报验申请及验收记录"),
+      item(16, "5028G01-SG-ZHHC-03-08-02-005", "高明分布式项目 开关柜G08柜 电力电缆终端制作安装分项工程质量报验申请及验收记录"),
+      item(17, "5028G01-SG-ZHHC-03-08-02-006", "高明分布式项目 开关柜G09柜 电力电缆终端制作安装分项工程质量报验申请及验收记录"),
+      item(18, "5028G01-SG-ZHHC-03-08-03-001", "高明分布式项目 #1光伏升压变 电力电缆中间接头制作安装分项工程质量报验申请及验收记录"),
+      item(19, "5028G01-SG-ZHHC-03-08-03-002", "高明分布式项目 #2光伏升压变 电力电缆中间接头制作安装分项工程质量报验申请及验收记录"),
+      item(20, "5028G01-SG-ZHHC-03-08-03-003", "高明分布式项目 开关柜G01柜 电力电缆中间接头制作安装分项工程质量报验申请及验收记录"),
+      item(21, "5028G01-SG-ZHHC-03-08-03-004", "高明分布式项目 开关柜G03柜 电力电缆中间接头制作安装分项工程质量报验申请及验收记录"),
+      item(22, "5028G01-SG-ZHHC-03-08-03-005", "高明分布式项目 开关柜G08柜 电力电缆中间接头制作安装分项工程质量报验申请及验收记录"),
+      item(23, "5028G01-SG-ZHHC-03-08-03-006", "高明分布式项目 开关柜G09柜 电力电缆中间接头制作安装分项工程质量报验申请及验收记录"),
+      item(24, "/", "高明分布式项目 电缆中间接头位置记录", "20250502", "56~56"),
+    ],
   };
 }
 

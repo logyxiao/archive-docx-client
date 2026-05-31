@@ -1,6 +1,6 @@
 import type { ArchiveItem, ArchiveRecord } from "../types";
 import { isProcessTemplateCategorySelected, normalizeProcessTemplateCategories } from "./categories";
-import { PROCESS_OUTPUT_DIR, SWITCH_STATION_OUTPUT_DIR } from "./constants";
+import { COLLECTOR_LINE_OUTPUT_DIR, PROCESS_OUTPUT_DIR, SWITCH_STATION_OUTPUT_DIR } from "./constants";
 import { renderProcessDocx } from "./docxRenderer";
 import { processOutputName } from "./naming";
 import { renderSummaryWorkbook } from "./summaryWorkbookRenderer";
@@ -41,7 +41,7 @@ export async function generateProcessDocs(
     }
 
     const recordOutputDir = joinPath(
-      joinPath(options.outputDir, templateModule === "switch-station" ? SWITCH_STATION_OUTPUT_DIR : PROCESS_OUTPUT_DIR),
+      joinPath(options.outputDir, outputDirForTemplateModule(templateModule)),
       sanitizeFileName(record.archiveCode + record.fullTitle),
     );
 
@@ -73,6 +73,16 @@ export async function generateProcessDocs(
   }
 
   return { files, skipped, errors };
+}
+
+function outputDirForTemplateModule(templateModule: ProcessTemplateModule): string {
+  if (templateModule === "switch-station") {
+    return SWITCH_STATION_OUTPUT_DIR;
+  }
+  if (templateModule === "collector-line") {
+    return COLLECTOR_LINE_OUTPUT_DIR;
+  }
+  return PROCESS_OUTPUT_DIR;
 }
 
 function expandSwitchStationTemplates(

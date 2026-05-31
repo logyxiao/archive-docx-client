@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import PizZip from "pizzip";
 import type { ArchiveItem, ArchiveRecord } from "../types";
+import { collectorLineTrialCablePair, collectorLineWorkbookReplacements } from "./collectorLine";
 import { PRESERVED_USER_FIELD_LABELS, SOURCE_MISSING_LABELS } from "./constants";
 import { resolveProcessFields } from "./fields";
 import {
@@ -26,9 +27,10 @@ export async function renderProcessWorkbook(
   for (const sheet of workbook.worksheets) {
     applyWorkbookValues(sheet, record, item, userFields, templateModule);
   }
+  applyCollectorLineWorkbookValues(workbook, item, templateModule);
 
   const buffer = await workbook.xlsx.writeBuffer();
-  return preserveProcessWorkbookPrintLayout(new Uint8Array(buffer), template);
+  return preserveProcessWorkbookPrintLayout(new Uint8Array(buffer), template, templateModule);
 }
 
 function applyWorkbookValues(
@@ -80,10 +82,8 @@ function fillInspectionLotProjectNames(sheet: ExcelJS.Worksheet, record: Archive
 }
 
 function shouldSkipProjectNameAutoFill(item: ArchiveItem, isSwitchStation: boolean): boolean {
-  if (!isSwitchStation) {
-    return false;
-  }
-  return /隐蔽工程|检查记录|施工记录|测量记录/.test(item.title);
+  return /隐蔽工程|检查记录|施工记录|测量记录|签证|位置记录/.test(item.title)
+    || (isSwitchStation && /隐蔽工程|检查记录|施工记录|测量记录/.test(item.title));
 }
 
 function inspectionLotContext(record: ArchiveRecord, item: ArchiveItem): {
@@ -181,7 +181,65 @@ function fillOrClearProfessionalForeman(sheet: ExcelJS.Worksheet, value: string)
   }
 }
 
-function preserveProcessWorkbookPrintLayout(bytes: Uint8Array, template: ArrayBuffer | Uint8Array): Uint8Array {
+function applyCollectorLineWorkbookValues(
+  workbook: ExcelJS.Workbook,
+  item: ArchiveItem,
+  templateModule: ProcessTemplateModule,
+) {
+  if (templateModule !== "collector-line") {
+    return;
+  }
+
+  const replacements = collectorLineWorkbookReplacements(item.title);
+  if (replacements.length === 0) {
+    return;
+  }
+
+  const cablePair = collectorLineTrialCablePair(item.title);
+  for (const sheet of workbook.worksheets) {
+    if (cablePair && item.title.includes("电缆带电试运签证")) {
+      sheet.name = `${cablePair}电缆带电试运签证`.slice(0, 31);
+    }
+
+    for (let rowNumber = 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
+      const row = sheet.getRow(rowNumber);
+      for (let columnNumber = 1; columnNumber <= sheet.columnCount; columnNumber += 1) {
+        replaceCollectorLineCellValue(row.getCell(columnNumber), replacements);
+      }
+    }
+  }
+}
+
+function replaceCollectorLineCellValue(
+  cell: ExcelJS.Cell,
+  replacements: ReturnType<typeof collectorLineWorkbookReplacements>,
+) {
+  if (typeof cell.value === "string") {
+    cell.value = applyCollectorLineTextReplacements(cell.value, replacements);
+    return;
+  }
+
+  if (cell.value && typeof cell.value === "object" && "richText" in cell.value && Array.isArray(cell.value.richText)) {
+    const originalText = cell.value.richText.map((part) => part.text).join("");
+    const nextText = applyCollectorLineTextReplacements(originalText, replacements);
+    if (nextText !== originalText) {
+      cell.value = nextText;
+    }
+  }
+}
+
+function applyCollectorLineTextReplacements(
+  value: string,
+  replacements: ReturnType<typeof collectorLineWorkbookReplacements>,
+): string {
+  return replacements.reduce((text, replacement) => text.replace(replacement.search, replacement.replacement), value);
+}
+
+function preserveProcessWorkbookPrintLayout(
+  bytes: Uint8Array,
+  template: ArrayBuffer | Uint8Array,
+  templateModule: ProcessTemplateModule,
+): Uint8Array {
   const zip = new PizZip(bytes);
   const templateZip = new PizZip(template);
   const worksheetPaths = Object.keys(zip.files).filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
@@ -192,7 +250,7 @@ function preserveProcessWorkbookPrintLayout(bytes: Uint8Array, template: ArrayBu
       continue;
     }
     const templateSheet = templateZip.file(path);
-    let sheetXml = forceOnePageWorksheetLayout(sheet.asText());
+    let sheetXml = templateModule === "collector-line" ? sheet.asText() : forceOnePageWorksheetLayout(sheet.asText());
     if (templateSheet) {
       sheetXml = restoreTemplateSheetFormatting(sheetXml, templateSheet.asText());
     }

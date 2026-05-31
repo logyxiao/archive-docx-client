@@ -39,9 +39,11 @@ const LAST_OUTPUT_DIR_KEY = "archive-docx-client:last-output-dir";
 const PROCESS_FIELDS_KEY = "archive-docx-client:process-fields";
 const PROCESS_TEMPLATE_CATEGORIES_KEY = "archive-docx-client:process-template-categories";
 const SWITCH_STATION_TEMPLATE_CATEGORIES_KEY = "archive-docx-client:switch-station-template-categories";
+const COLLECTOR_LINE_TEMPLATE_CATEGORIES_KEY = "archive-docx-client:collector-line-template-categories";
 const ARCHIVE_DOCX_TAB = "archive-docx";
 const PROCESS_DOCS_TAB = "process-docs";
 const SWITCH_STATION_TAB = "switch-station-process-docs";
+const COLLECTOR_LINE_TAB = "collector-line-process-docs";
 
 interface SavedProcessFields {
   projectName: string;
@@ -125,6 +127,10 @@ function App() {
     () => loadSavedProcessTemplateCategories(SWITCH_STATION_TEMPLATE_CATEGORIES_KEY),
     [],
   );
+  const savedCollectorLineTemplateCategories = useMemo(
+    () => loadSavedProcessTemplateCategories(COLLECTOR_LINE_TEMPLATE_CATEGORIES_KEY),
+    [],
+  );
   const [excelPath, setExcelPath] = useState("");
   const [outputDir, setOutputDir] = useState(() => localStorage.getItem(LAST_OUTPUT_DIR_KEY) ?? "");
   const actualOutputDir = useMemo(() => {
@@ -170,6 +176,9 @@ function App() {
   const [selectedSwitchStationTemplateCategories, setSelectedSwitchStationTemplateCategories] = useState<ProcessTemplateCategoryId[]>(
     savedSwitchStationTemplateCategories,
   );
+  const [selectedCollectorLineTemplateCategories, setSelectedCollectorLineTemplateCategories] = useState<ProcessTemplateCategoryId[]>(
+    savedCollectorLineTemplateCategories,
+  );
   const [isProcessInfoModalOpen, setIsProcessInfoModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -200,6 +209,8 @@ function App() {
     selectedCodes.length > 0 && Boolean(actualOutputDir) && selectedProcessTemplateCategories.length > 0 && !isGeneratingProcess;
   const canGenerateSwitchStation =
     selectedCodes.length > 0 && Boolean(actualOutputDir) && selectedSwitchStationTemplateCategories.length > 0 && !isGeneratingProcess;
+  const canGenerateCollectorLine =
+    selectedCodes.length > 0 && Boolean(actualOutputDir) && selectedCollectorLineTemplateCategories.length > 0 && !isGeneratingProcess;
   const previewIndex = previewRecord
     ? filteredRecords.findIndex((record) => record.archiveCode === previewRecord.archiveCode)
     : -1;
@@ -240,6 +251,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem(SWITCH_STATION_TEMPLATE_CATEGORIES_KEY, JSON.stringify(selectedSwitchStationTemplateCategories));
   }, [selectedSwitchStationTemplateCategories]);
+
+  useEffect(() => {
+    localStorage.setItem(COLLECTOR_LINE_TEMPLATE_CATEGORIES_KEY, JSON.stringify(selectedCollectorLineTemplateCategories));
+  }, [selectedCollectorLineTemplateCategories]);
 
   async function chooseExcel() {
     const selected = await open({
@@ -372,6 +387,12 @@ function App() {
     );
   }
 
+  function toggleCollectorLineTemplateCategory(categoryId: ProcessTemplateCategoryId) {
+    setSelectedCollectorLineTemplateCategories((current) =>
+      current.includes(categoryId) ? current.filter((id) => id !== categoryId) : [...current, categoryId],
+    );
+  }
+
   async function generate() {
     if (!canGenerate) {
       return;
@@ -432,7 +453,8 @@ function App() {
 
   async function generateProcess(templateModule: ProcessTemplateModule = "process") {
     const isSwitchStation = templateModule === "switch-station";
-    if (isSwitchStation ? !canGenerateSwitchStation : !canGenerateProcess) {
+    const isCollectorLine = templateModule === "collector-line";
+    if (isSwitchStation ? !canGenerateSwitchStation : isCollectorLine ? !canGenerateCollectorLine : !canGenerateProcess) {
       return;
     }
 
@@ -444,7 +466,11 @@ function App() {
         {
           selectedCodes,
           outputDir: actualOutputDir,
-          selectedTemplateCategories: isSwitchStation ? selectedSwitchStationTemplateCategories : selectedProcessTemplateCategories,
+          selectedTemplateCategories: isSwitchStation
+            ? selectedSwitchStationTemplateCategories
+            : isCollectorLine
+              ? selectedCollectorLineTemplateCategories
+              : selectedProcessTemplateCategories,
           templateModule,
           userFields: {
             projectName: processProjectName.trim(),
@@ -464,7 +490,7 @@ function App() {
       );
       const skippedText = result.skipped.length > 0 ? `\n跳过 ${result.skipped.length} 条：\n${result.skipped.slice(0, 12).join("\n")}` : "";
       const errorText = result.errors.length > 0 ? `\n失败 ${result.errors.length} 个：\n${result.errors.slice(0, 12).join("\n")}` : "";
-      await showDialogMessage(`${isSwitchStation ? "开关站电气设备安装（子单位工程）" : "过程资料"}生成完成：${result.files.length} 个文件。${skippedText}${errorText}`, {
+      await showDialogMessage(`${processModuleLabel(templateModule)}生成完成：${result.files.length} 个文件。${skippedText}${errorText}`, {
         title: result.errors.length > 0 ? "生成完成" : "生成成功",
         kind: result.errors.length > 0 ? "warning" : "info",
       });
@@ -473,6 +499,16 @@ function App() {
     } finally {
       setIsGeneratingProcess(false);
     }
+  }
+
+  function processModuleLabel(templateModule: ProcessTemplateModule): string {
+    if (templateModule === "switch-station") {
+      return "开关站电气设备安装（子单位工程）";
+    }
+    if (templateModule === "collector-line") {
+      return "集电线路安装工程";
+    }
+    return "过程资料";
   }
 
   const controlBand = (
@@ -578,6 +614,14 @@ function App() {
         >
           <FolderTree size={17} />
           开关站电气设备安装（子单位工程）
+        </button>
+        <button
+          className={`tab-button ${activeTab === COLLECTOR_LINE_TAB ? "active" : ""}`}
+          onClick={() => setActiveTab(COLLECTOR_LINE_TAB)}
+          type="button"
+        >
+          <FolderTree size={17} />
+          集电线路安装工程
         </button>
         <button className="secondary-button update-button tab-update-button" onClick={checkForUpdates} disabled={isCheckingUpdate} title="检查更新">
           {isCheckingUpdate ? <Loader2 className="spin" size={15} /> : <RefreshCw size={15} />}
@@ -736,6 +780,66 @@ function App() {
                   <button className="generate-button" onClick={() => generateProcess("switch-station")} disabled={!canGenerateSwitchStation}>
                     {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
                     生成开关站资料 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
+                  </button>
+                  <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
+                    <FolderOpen size={18} />
+                    打开输出目录
+                  </button>
+                </div>
+              </div>
+            </section>
+          </section>
+        </section>
+      ) : null}
+
+      {activeTab === COLLECTOR_LINE_TAB ? (
+        <section className="tab-panel">
+          {controlBand}
+
+          <section className="workspace">
+            {recordPane}
+
+            <section className="detail-pane">
+              <div className="tool-section">
+                <div className="section-heading">
+                  <FolderTree size={19} />
+                  <h2>集电线路安装工程</h2>
+                </div>
+                <div className="process-info-actions">
+                  <button className="secondary-button process-info-button" type="button" onClick={() => setIsProcessInfoModalOpen(true)}>
+                    <SlidersHorizontal size={17} />
+                    填写生成信息
+                  </button>
+                </div>
+                <div className="process-template-section">
+                  <div className="template-section-heading">
+                    <span>生成模板</span>
+                    <div className="mini-actions">
+                      <button type="button" onClick={() => setSelectedCollectorLineTemplateCategories([...PROCESS_TEMPLATE_CATEGORY_IDS])}>
+                        全选
+                      </button>
+                      <button type="button" onClick={() => setSelectedCollectorLineTemplateCategories([])}>
+                        清空
+                      </button>
+                    </div>
+                  </div>
+                  <div className="process-template-grid">
+                    {PROCESS_TEMPLATE_CATEGORIES.map((category) => (
+                      <label key={category.id} className="template-check">
+                        <input
+                          type="checkbox"
+                          checked={selectedCollectorLineTemplateCategories.includes(category.id)}
+                          onChange={() => toggleCollectorLineTemplateCategory(category.id)}
+                        />
+                        <span>{category.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="generation-actions">
+                  <button className="generate-button" onClick={() => generateProcess("collector-line")} disabled={!canGenerateCollectorLine}>
+                    {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
+                    生成集电线路资料 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />

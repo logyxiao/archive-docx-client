@@ -1,4 +1,5 @@
 import type { ArchiveItem } from "../types";
+import { collectorLineOutputTitle } from "./collectorLine";
 import { stripProjectPrefix } from "./textReplacement";
 import type { ProcessTemplate } from "./types";
 import { sanitizeFileName } from "./utils";
@@ -15,6 +16,10 @@ export function processOutputName(template: ProcessTemplate, item: ArchiveItem):
 
 function outputTitle(template: ProcessTemplate, title: string): string {
   const cleanTitle = title.replace(/^\s*\d+[、.．\-\s]*/, "").trim();
+  const collectorLineTitle = collectorLineOutputTitle(cleanTitle);
+  if (collectorLineTitle && template.kind === "xlsx") {
+    return collectorLineTitle;
+  }
   const acceptanceStem = cleanTitle
     .replace(/\s*质量(?:报验申请|报审表)及验收记录\s*$/, "")
     .replace(/[，,。；;：:\s]+$/g, "")
