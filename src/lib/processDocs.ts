@@ -16,6 +16,7 @@ export type {
   ProcessTemplate,
   ProcessTemplateManifest,
   ProcessTemplateMatch,
+  ProcessTemplateMatchMode,
   ProcessTemplateModule,
   ProcessTemplateSelection,
   ProcessUserFields,

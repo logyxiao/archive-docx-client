@@ -2,7 +2,7 @@ import ExcelJS from "exceljs";
 import { isMergedSlave } from "./workbookCells";
 
 const QUALITY_STANDARD_HEADER = "质量标准";
-const SELF_CHECK_HEADERS = ["施工单位自检记录", "质量验收结果"];
+const SELF_CHECK_HEADERS = ["施工单位自检记录", "质量验收结果", "质量检查验收结果"];
 const SAMPLE_COUNT = 10;
 
 interface ColumnRange {
@@ -166,7 +166,43 @@ export function parseNumericQualityRange(text: string): NumericRange | null {
     return { min: 0, max, decimals: decimalsFor(max) };
   }
 
+  const strictUpper = normalized.match(/(?:<|＜|小于|应小于)(-?\d+(?:\.\d+)?)/);
+  if (strictUpper) {
+    const limit = Number(strictUpper[1]);
+    const decimals = Math.max(decimalsFor(limit), 1);
+    const step = 1 / (10 ** decimals);
+    return { min: 0, max: limit - step, decimals };
+  }
+
+  const lower = normalized.match(/(?:≥|>=|不小于|不少于|不应小于)(-?\d+(?:\.\d+)?)/);
+  if (lower) {
+    const min = Number(lower[1]);
+    return { min, max: lowerBoundMax(min), decimals: decimalsFor(min) };
+  }
+
+  const strictLower = normalized.match(/(?:>|＞|大于|应大于)(-?\d+(?:\.\d+)?)/);
+  if (strictLower) {
+    const limit = Number(strictLower[1]);
+    const decimals = Math.max(decimalsFor(limit), 1);
+    const step = 1 / (10 ** decimals);
+    const min = limit + step;
+    return { min, max: lowerBoundMax(limit), decimals };
+  }
+
   return null;
+}
+
+export function qualityResultTextForStandard(text: string, count = SAMPLE_COUNT): string | null {
+  const range = parseNumericQualityRange(text);
+  if (!range) {
+    return null;
+  }
+
+  return distributedValuesInRange(range, count).join(",");
+}
+
+function lowerBoundMax(min: number): number {
+  return min + 3;
 }
 
 function randomInteger(min: number, max: number): number {

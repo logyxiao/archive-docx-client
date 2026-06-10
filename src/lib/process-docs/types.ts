@@ -2,6 +2,7 @@ import type { GeneratedFile } from "../types";
 import type { ProcessTemplateCategoryId } from "./categories";
 
 export type ProcessTemplateModule = "process" | "switch-station" | "collector-line";
+export type ProcessTemplateMatchMode = "any" | "all";
 
 export interface ProcessTemplateManifest {
   templates: ProcessTemplate[];
@@ -15,6 +16,12 @@ export interface ProcessTemplate {
   outputExtension: ".docx" | ".xlsx";
   outputFileCodeOverride?: string;
   userTemplatePath?: string;
+  displayName?: string;
+  matchKeywords?: string[];
+  matchMode?: ProcessTemplateMatchMode;
+  templateModule?: ProcessTemplateModule;
+  category?: ProcessTemplateCategoryId;
+  enabled?: boolean;
 }
 
 export interface GenerateProcessOptions {

@@ -44,6 +44,8 @@ export function replaceTemplatePlaceholders(
   const fields = resolveProcessFields(userFields, item.owner || record.filingUnit);
   const projectName = normalizeProjectName(userFields.projectName?.trim() || record.projectName);
   const fileCode = item.fileCode && item.fileCode !== "/" ? item.fileCode : "";
+  const titleWithoutProject = stripProjectPrefix(item.title);
+  const titleSubject = templateTitleSubject(item.title);
   const replacements: Record<string, string> = {
     项目名: projectName,
     工程名称: projectName,
@@ -52,6 +54,9 @@ export function replaceTemplatePlaceholders(
     案卷题名: record.fullTitle,
     文件编号: fileCode,
     文件题名: item.title,
+    文件题名去项目: titleWithoutProject,
+    文件题名主题: titleSubject,
+    验收项目名称: titleSubject,
     文件日期: item.fileDate,
     文件日期中文: formatChineseDate(item.fileDate),
     责任者: item.owner || record.filingUnit,
@@ -121,6 +126,19 @@ export function stripProjectPrefix(title: string): string {
   return title
     .replace(/^\s*\d+[、.．\-\s]*/, "")
     .replace(/^.*?项目\s*/, "")
+    .trim();
+}
+
+function templateTitleSubject(title: string): string {
+  return stripProjectPrefix(title)
+    .replace(/\s*质量(?:报验申请|报审表)及验收记录\s*$/u, "")
+    .replace(/\s*检验批质量(?:检查)?验收(?:评定)?记录\s*$/u, "")
+    .replace(/\s*验收记录\s*$/u, "")
+    .replace(/\s*开工报审表?\s*$/u, "")
+    .replace(/[，,。；;：:\s]+$/g, "")
+    .replace(/\s*子单位工程\s*$/u, "")
+    .replace(/\s*分部工程\s*$/u, "")
+    .replace(/\s*分项工程\s*$/u, "")
     .trim();
 }
 

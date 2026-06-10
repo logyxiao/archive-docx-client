@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { ask, message as showDialogMessage, open } from "@tauri-apps/plugin-dialog";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { check } from "@tauri-apps/plugin-updater";
 import {
   Check,
   ChevronLeft,
@@ -12,10 +10,11 @@ import {
   FolderOpen,
   Info,
   Loader2,
-  RefreshCw,
+  Save,
   Search,
   Settings2,
   SlidersHorizontal,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -35,16 +34,20 @@ import {
   normalizeProcessTemplateCategories,
   type ProcessTemplateManifest,
   type ProcessTemplateMatch,
+  type ProcessTemplate,
   type ProcessTemplateCategoryId,
+  type ProcessTemplateMatchMode,
   type ProcessTemplateModule,
   type ProcessTemplateSelection,
 } from "./lib/processDocs";
 import {
+  deleteUserProcessTemplate,
   importProcessTemplate,
   openSystemPath,
   processBuiltinTemplateDir,
   processTemplateUserDir,
   readBinaryFile,
+  updateUserProcessTemplate,
   writeBinaryFile,
 } from "./lib/tauriFiles";
 import type { ArchiveRecord } from "./lib/types";
@@ -67,6 +70,24 @@ interface AllProcessTemplateOption {
   label: string;
   searchText: string;
   match?: ProcessTemplateMatch;
+}
+
+interface TemplateDirectoryEntry {
+  key: string;
+  name: string;
+  path: string;
+  source: string;
+  kind: string;
+  searchText: string;
+}
+
+interface UserTemplateDraft {
+  displayName: string;
+  matchKeywordsText: string;
+  matchMode: ProcessTemplateMatchMode;
+  templateModule: ProcessTemplateModule;
+  category: ProcessTemplateCategoryId | "";
+  enabled: boolean;
 }
 
 interface SavedProcessFields {
@@ -96,6 +117,50 @@ const EMPTY_PROCESS_FIELDS: SavedProcessFields = {
   subcontractorContent: "",
   supervisionDepartment: "",
 };
+
+const TEMPLATE_IMPORT_STEPS = [
+  "在 Word 或 Excel 模板中写入占位符，例如 {{项目名}}、{{文件题名}}、{{文件日期中文}}。",
+  "Excel 质量结果可写 {{质量验收结果:<2}} 或 {{质量验收结果:≥6}}；下限型标准默认填 6~9，明确范围可写 {{质量验收结果:6~10}}。",
+  "点击“导入模板”，选择 .docx 或 .xlsx 文件，软件会复制到导入模板目录。",
+  "在导入模板配置里填写匹配关键词；生成时文件题名命中关键词就会默认选中该模板。",
+];
+
+const TEMPLATE_CONFIG_FIELDS = [
+  "显示名称：模板管理页和下拉框里看到的名称。",
+  "所属模块：过程资料、开关站电气设备安装、集电线路安装工程。",
+  "模板分类：用于普通过程资料页的分类筛选；不填则自动识别。",
+  "匹配关键词：每行一个，也可用逗号分隔。",
+  "关键词模式：任一命中或全部命中。",
+  "启用状态：关闭后该模板不参与默认匹配和下拉选择。",
+  "质量验收结果：支持 ±2、<2、≤2、0~2、≥6 这类标准，生成时自动随机填充。",
+];
+
+const PROCESS_TEMPLATE_PLACEHOLDERS = [
+  "项目名",
+  "工程名称",
+  "工程编号",
+  "档号",
+  "案卷题名",
+  "文件编号",
+  "文件题名",
+  "文件题名去项目",
+  "文件题名主题",
+  "验收项目名称",
+  "文件日期",
+  "文件日期中文",
+  "责任者",
+  "编制单位",
+  "立卷单位",
+  "总承包单位",
+  "施工单位",
+  "监理单位",
+  "监理项目部",
+  "分包单位",
+  "分包内容",
+  "质量验收结果:<2",
+  "质量验收结果:≥6",
+  "质量验收结果:6~10",
+];
 
 function loadSavedProcessFields(): SavedProcessFields {
   try {
@@ -137,6 +202,23 @@ function loadSavedProcessTemplateCategories(storageKey: string): ProcessTemplate
     return [...normalizeProcessTemplateCategories(parsed)];
   } catch {
     return [...PROCESS_TEMPLATE_CATEGORY_IDS];
+  }
+}
+
+async function copyText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    return;
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "true");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
   }
 }
 
@@ -183,6 +265,57 @@ function processModuleLabel(templateModule: ProcessTemplateModule): string {
     return "集电线路安装工程";
   }
   return "过程资料";
+}
+
+function templateIdentityKey(template: ProcessTemplate): string {
+  return [
+    template.userTemplatePath ?? "builtin",
+    template.templateFile,
+    template.originalName,
+    template.outputFileCodeOverride ?? "",
+  ].join("\u0000");
+}
+
+function userTemplateKey(template: ProcessTemplate): string {
+  return template.userTemplatePath ?? templateIdentityKey(template);
+}
+
+function draftFromUserTemplate(template: ProcessTemplate): UserTemplateDraft {
+  return {
+    displayName: template.displayName?.trim() || template.originalName || template.templateFile,
+    matchKeywordsText: (template.matchKeywords ?? []).join("\n"),
+    matchMode: template.matchMode === "all" ? "all" : "any",
+    templateModule: template.templateModule ?? "process",
+    category: template.category ?? "",
+    enabled: template.enabled !== false,
+  };
+}
+
+function parseTemplateKeywords(value: string): string[] {
+  const result: string[] = [];
+  for (const keyword of value.split(/[\n,，;；]+/)) {
+    const trimmed = keyword.trim();
+    if (!trimmed || result.includes(trimmed)) {
+      continue;
+    }
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function joinTemplatePath(dir: string, fileName: string): string {
+  if (!dir) {
+    return "";
+  }
+
+  const separator = dir.includes("\\") ? "\\" : "/";
+  return `${dir.replace(/[\\/]+$/, "")}${separator}${fileName}`;
+}
+
+function parentDirectory(path: string): string {
+  const normalized = path.replace(/[\\/]+$/, "");
+  const index = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
+  return index > 0 ? normalized.slice(0, index) : normalized;
 }
 
 function App() {
@@ -255,10 +388,19 @@ function App() {
   const [isLoadingProcessManifest, setIsLoadingProcessManifest] = useState(false);
   const [isImportingProcessTemplate, setIsImportingProcessTemplate] = useState(false);
   const [isProcessInfoModalOpen, setIsProcessInfoModalOpen] = useState(false);
+  const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false);
+  const [isTemplateGuideOpen, setIsTemplateGuideOpen] = useState(false);
+  const [copiedPlaceholder, setCopiedPlaceholder] = useState("");
+  const [builtInTemplateDir, setBuiltInTemplateDir] = useState("");
+  const [templateDirectoryError, setTemplateDirectoryError] = useState("");
+  const [templateDirectoryQuery, setTemplateDirectoryQuery] = useState("");
+  const [templateDrafts, setTemplateDrafts] = useState<Record<string, UserTemplateDraft>>({});
+  const [savingTemplateKeys, setSavingTemplateKeys] = useState<Record<string, boolean>>({});
+  const [deletingTemplateKeys, setDeletingTemplateKeys] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingProcess, setIsGeneratingProcess] = useState(false);
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
  
   const filteredRecords = useMemo(() => {
     let result = records;
@@ -303,6 +445,50 @@ function App() {
         })),
       ];
     },
+    [processManifest],
+  );
+
+  const templateDirectoryEntries = useMemo<TemplateDirectoryEntry[]>(
+    () => {
+      if (!processManifest) {
+        return [];
+      }
+
+      return processManifest.templates
+        .map((template) => {
+          const isUserTemplate = Boolean(template.userTemplatePath);
+          const name = template.displayName?.trim() || template.templateFile;
+          const path = template.userTemplatePath ?? joinTemplatePath(builtInTemplateDir, template.templateFile);
+          const source = isUserTemplate ? "导入模板" : "内置模板";
+          const kind = template.kind.toUpperCase();
+          return {
+            key: templateIdentityKey(template),
+            name,
+            path,
+            source,
+            kind,
+            searchText: `${name} ${template.templateFile} ${template.originalName} ${path} ${source} ${kind}`.toLowerCase(),
+          };
+        })
+        .sort((left, right) => `${left.source}${left.name}`.localeCompare(`${right.source}${right.name}`, "zh-Hans-CN"));
+    },
+    [builtInTemplateDir, processManifest],
+  );
+
+  const filteredTemplateDirectoryEntries = useMemo(
+    () => {
+      const keyword = templateDirectoryQuery.trim().toLowerCase();
+      if (!keyword) {
+        return templateDirectoryEntries;
+      }
+
+      return templateDirectoryEntries.filter((entry) => entry.searchText.includes(keyword));
+    },
+    [templateDirectoryEntries, templateDirectoryQuery],
+  );
+
+  const userProcessTemplates = useMemo(
+    () => processManifest?.templates.filter((template) => template.userTemplatePath) ?? [],
     [processManifest],
   );
 
@@ -497,6 +683,45 @@ function App() {
     };
   }, [activeTab, processManifest]);
 
+  useEffect(() => {
+    if (!isTemplateManagerOpen) {
+      return;
+    }
+
+    let cancelled = false;
+    setTemplateDirectoryError("");
+    processBuiltinTemplateDir()
+      .then((templateDir) => {
+        if (!cancelled) {
+          setBuiltInTemplateDir(templateDir);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setTemplateDirectoryError(error instanceof Error ? error.message : String(error));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isTemplateManagerOpen]);
+
+  useEffect(() => {
+    if (!isTemplateManagerOpen) {
+      return;
+    }
+
+    setTemplateDrafts((current) => {
+      const next: Record<string, UserTemplateDraft> = {};
+      for (const template of userProcessTemplates) {
+        const key = userTemplateKey(template);
+        next[key] = current[key] ?? draftFromUserTemplate(template);
+      }
+      return next;
+    });
+  }, [isTemplateManagerOpen, userProcessTemplates]);
+
   async function chooseExcel() {
     const selected = await open({
       multiple: false,
@@ -552,41 +777,7 @@ function App() {
     }
   }
 
-  async function checkForUpdates() {
-    setIsCheckingUpdate(true);
 
-    try {
-      const update = await check();
-      if (!update) {
-        await showDialogMessage("当前已经是最新版本。", {
-          title: "检查更新",
-          kind: "info",
-        });
-        return;
-      }
-
-      const shouldInstall = await ask(
-        `发现新版本 ${update.version}。\n\n是否立即下载并安装？安装完成后应用会自动重启。`,
-        {
-          title: "发现更新",
-          kind: "info",
-          okLabel: "立即更新",
-          cancelLabel: "稍后",
-        },
-      );
-
-      if (!shouldInstall) {
-        return;
-      }
-
-      await update.downloadAndInstall();
-      await relaunch();
-    } catch (error) {
-      await showOperationError(error);
-    } finally {
-      setIsCheckingUpdate(false);
-    }
-  }
 
   function toggleCode(code: string) {
     setSelectedCodes((current) =>
@@ -820,6 +1011,20 @@ function App() {
     setActiveAllTemplateRow("");
   }
 
+  async function copyPlaceholder(value: string) {
+    await copyText(value);
+    setCopiedPlaceholder(value);
+    window.setTimeout(() => {
+      setCopiedPlaceholder((current) => current === value ? "" : current);
+    }, 1200);
+  }
+
+  async function reloadProcessManifest() {
+    const manifest = await loadProcessManifest();
+    setProcessManifest(manifest);
+    return manifest;
+  }
+
   async function importProcessTemplates() {
     const selected = await open({
       multiple: true,
@@ -835,8 +1040,7 @@ function App() {
       for (const sourcePath of selectedPaths) {
         await importProcessTemplate(sourcePath);
       }
-      const manifest = await loadProcessManifest();
-      setProcessManifest(manifest);
+      await reloadProcessManifest();
       await showDialogMessage(`已导入 ${selectedPaths.length} 个模板。`, {
         title: "导入完成",
         kind: "info",
@@ -845,6 +1049,77 @@ function App() {
       await showOperationError(error);
     } finally {
       setIsImportingProcessTemplate(false);
+    }
+  }
+
+  function updateTemplateDraft(template: ProcessTemplate, patch: Partial<UserTemplateDraft>) {
+    const key = userTemplateKey(template);
+    setTemplateDrafts((current) => ({
+      ...current,
+      [key]: {
+        ...(current[key] ?? draftFromUserTemplate(template)),
+        ...patch,
+      },
+    }));
+  }
+
+  async function saveUserProcessTemplate(template: ProcessTemplate) {
+    if (!template.userTemplatePath) {
+      return;
+    }
+
+    const key = userTemplateKey(template);
+    const draft = templateDrafts[key] ?? draftFromUserTemplate(template);
+    setSavingTemplateKeys((current) => ({ ...current, [key]: true }));
+    try {
+      await updateUserProcessTemplate({
+        ...template,
+        displayName: draft.displayName.trim() || undefined,
+        matchKeywords: parseTemplateKeywords(draft.matchKeywordsText),
+        matchMode: draft.matchMode,
+        templateModule: draft.templateModule,
+        category: draft.category || undefined,
+        enabled: draft.enabled,
+      });
+      await reloadProcessManifest();
+      await showDialogMessage("模板配置已保存。", { title: "保存成功", kind: "info" });
+    } catch (error) {
+      await showOperationError(error);
+    } finally {
+      setSavingTemplateKeys((current) => ({ ...current, [key]: false }));
+    }
+  }
+
+  async function deleteProcessTemplate(template: ProcessTemplate) {
+    if (!template.userTemplatePath) {
+      return;
+    }
+
+    const name = template.displayName?.trim() || template.templateFile;
+    const shouldDelete = await ask(`确定删除导入模板“${name}”吗？`, {
+      title: "删除模板",
+      kind: "warning",
+      okLabel: "删除",
+      cancelLabel: "取消",
+    });
+    if (!shouldDelete) {
+      return;
+    }
+
+    const key = userTemplateKey(template);
+    setDeletingTemplateKeys((current) => ({ ...current, [key]: true }));
+    try {
+      await deleteUserProcessTemplate(template.userTemplatePath);
+      await reloadProcessManifest();
+      setTemplateDrafts((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    } catch (error) {
+      await showOperationError(error);
+    } finally {
+      setDeletingTemplateKeys((current) => ({ ...current, [key]: false }));
     }
   }
 
@@ -861,6 +1136,18 @@ function App() {
     try {
       const templateDir = await processTemplateUserDir();
       await openSystemPath(templateDir);
+    } catch (error) {
+      await showOperationError(error);
+    }
+  }
+
+  async function openTemplateDirectory(entry: TemplateDirectoryEntry) {
+    if (!entry.path) {
+      return;
+    }
+
+    try {
+      await openSystemPath(parentDirectory(entry.path));
     } catch (error) {
       await showOperationError(error);
     }
@@ -961,61 +1248,64 @@ function App() {
 
   return (
     <main className="app-shell">
-      <nav className="app-tabs" aria-label="功能栏目">
-        <button
-          className={`tab-button ${activeTab === ARCHIVE_DOCX_TAB ? "active" : ""}`}
-          onClick={() => setActiveTab(ARCHIVE_DOCX_TAB)}
-          type="button"
-        >
-          <FileText size={17} />
-          档案文档生成器
-        </button>
-        <button
-          className={`tab-button ${activeTab === PROCESS_DOCS_TAB ? "active" : ""}`}
-          onClick={() => setActiveTab(PROCESS_DOCS_TAB)}
-          type="button"
-        >
-          <FolderTree size={17} />
-          过程资料生成
-        </button>
-        <button
-          className={`tab-button ${activeTab === ALL_PROCESS_DOCS_TAB ? "active" : ""}`}
-          onClick={() => setActiveTab(ALL_PROCESS_DOCS_TAB)}
-          type="button"
-        >
-          <FolderTree size={17} />
-          全部
-        </button>
-        <button
-          className={`tab-button ${activeTab === SWITCH_STATION_TAB ? "active" : ""}`}
-          onClick={() => setActiveTab(SWITCH_STATION_TAB)}
-          type="button"
-        >
-          <FolderTree size={17} />
-          开关站电气设备安装（子单位工程）
-        </button>
-        <button
-          className={`tab-button ${activeTab === COLLECTOR_LINE_TAB ? "active" : ""}`}
-          onClick={() => setActiveTab(COLLECTOR_LINE_TAB)}
-          type="button"
-        >
-          <FolderTree size={17} />
-          集电线路安装工程
-        </button>
-        <button className="secondary-button update-button tab-update-button" onClick={checkForUpdates} disabled={isCheckingUpdate} title="检查更新">
-          {isCheckingUpdate ? <Loader2 className="spin" size={15} /> : <RefreshCw size={15} />}
-          更新
-        </button>
-      </nav>
+      <header className="app-header">
+        <div className="app-logo-area">
+          <FileText className="logo-icon" size={20} />
+          <h1 className="app-title">Docx 归档助手</h1>
+        </div>
+        <nav className="app-tabs" aria-label="功能栏目">
+          <button
+            className={`tab-button ${activeTab === ARCHIVE_DOCX_TAB ? "active" : ""}`}
+            onClick={() => setActiveTab(ARCHIVE_DOCX_TAB)}
+            type="button"
+          >
+            <FileText size={17} />
+            档案文档生成器
+          </button>
+          <button
+            className={`tab-button ${activeTab === PROCESS_DOCS_TAB ? "active" : ""}`}
+            onClick={() => setActiveTab(PROCESS_DOCS_TAB)}
+            type="button"
+          >
+            <FolderTree size={17} />
+            过程资料生成
+          </button>
+          <button
+            className={`tab-button ${activeTab === ALL_PROCESS_DOCS_TAB ? "active" : ""}`}
+            onClick={() => setActiveTab(ALL_PROCESS_DOCS_TAB)}
+            type="button"
+          >
+            <FolderTree size={17} />
+            全部过程资料
+          </button>
+          <button
+            className={`tab-button ${activeTab === SWITCH_STATION_TAB ? "active" : ""}`}
+            onClick={() => setActiveTab(SWITCH_STATION_TAB)}
+            type="button"
+          >
+            <FolderTree size={17} />
+            开关站电气设备安装
+          </button>
+          <button
+            className={`tab-button ${activeTab === COLLECTOR_LINE_TAB ? "active" : ""}`}
+            onClick={() => setActiveTab(COLLECTOR_LINE_TAB)}
+            type="button"
+          >
+            <FolderTree size={17} />
+            集电线路安装工程
+          </button>
+        </nav>
+      </header>
 
-      {activeTab === ARCHIVE_DOCX_TAB ? (
-        <section className="tab-panel">
+      <section className="workspace-container">
+        <aside className="left-panel">
           {controlBand}
+          {recordPane}
+        </aside>
 
-          <section className="workspace">
-            {recordPane}
-
-            <section className="detail-pane">
+        <section className="right-panel">
+          {activeTab === ARCHIVE_DOCX_TAB ? (
+            <div className="detail-pane">
               <div className="tool-section">
                 <div className="section-heading">
                   <Settings2 size={19} />
@@ -1046,19 +1336,11 @@ function App() {
                   </button>
                 </div>
               </div>
-            </section>
-          </section>
-        </section>
-      ) : null}
+            </div>
+          ) : null}
 
-      {activeTab === PROCESS_DOCS_TAB ? (
-        <section className="tab-panel">
-          {controlBand}
-
-          <section className="workspace">
-            {recordPane}
-
-            <section className="detail-pane">
+          {activeTab === PROCESS_DOCS_TAB ? (
+            <div className="detail-pane">
               <div className="tool-section">
                 <div className="section-heading">
                   <FolderTree size={19} />
@@ -1106,56 +1388,34 @@ function App() {
                   </button>
                 </div>
               </div>
-            </section>
-          </section>
-        </section>
-      ) : null}
+            </div>
+          ) : null}
 
-      {activeTab === ALL_PROCESS_DOCS_TAB ? (
-        <section className="tab-panel">
-          {controlBand}
-
-          <section className="workspace">
-            {recordPane}
-
-            <section className="detail-pane">
+          {activeTab === ALL_PROCESS_DOCS_TAB ? (
+            <div className="detail-pane">
               <div className="tool-section all-process-tool">
-                <div className="section-heading">
-                  <FolderTree size={19} />
-                  <h2>全部过程资料</h2>
-                </div>
-                <div className="process-info-actions">
-                  <button className="secondary-button process-info-button" type="button" onClick={() => setIsProcessInfoModalOpen(true)}>
-                    <SlidersHorizontal size={17} />
-                    填写生成信息
-                  </button>
-                </div>
                 <div className="process-template-section">
-                  <div className="template-section-heading">
-                    <span>文件题名与模板匹配</span>
-                  </div>
                   <div className="all-template-summary">
                     <span>
                       已选 {selectedCodes.length} 个档号，{allProcessRows.length} 条文件题名
                       {unresolvedAllProcessRows.length > 0 ? `，${unresolvedAllProcessRows.length} 条需选择模板` : ""}
                     </span>
                     <div className="template-summary-actions">
-                      <button
-                        type="button"
-                        className="template-dir-button"
-                        onClick={() => void importProcessTemplates()}
-                        disabled={isImportingProcessTemplate}
-                      >
-                        {isImportingProcessTemplate ? <Loader2 className="spin" size={15} /> : <Upload size={15} />}
-                        导入模板
+                      <button className="template-dir-button" type="button" onClick={() => setIsProcessInfoModalOpen(true)}>
+                        <SlidersHorizontal size={15} />
+                        填写生成信息
+                      </button>
+                      <button type="button" className="template-dir-button" onClick={() => setIsTemplateManagerOpen(true)}>
+                        <Settings2 size={15} />
+                        模板管理
                       </button>
                       <button type="button" className="template-dir-button" onClick={() => void openBuiltInProcessTemplateDir()}>
                         <FolderOpen size={15} />
-                        打开内置目录
+                        内置目录
                       </button>
                       <button type="button" className="template-dir-button" onClick={() => void openUserProcessTemplateDir()}>
                         <FolderOpen size={15} />
-                        打开导入目录
+                        导入目录
                       </button>
                     </div>
                   </div>
@@ -1167,7 +1427,7 @@ function App() {
                       正在加载模板
                     </div>
                   ) : selectedCodes.length === 0 ? (
-                    <div className="empty-state detail-empty">请选择档号</div>
+                    <div className="empty-state detail-empty all-process-empty">请选择档号</div>
                   ) : allProcessRows.length === 0 ? (
                     <div className="empty-state detail-empty">未读取到文件题名</div>
                   ) : (
@@ -1181,16 +1441,20 @@ function App() {
                           {group.rows.map((row) => {
                             const selectedOption = selectedAllTemplateOption(row.key, row.matches);
                             const isSkipped = selectedOption?.key === NO_PROCESS_TEMPLATE_KEY;
+                            const isUnmatched = row.matches.length === 0 && !selectedOption?.match;
                             const searchTerm = allTemplateSearchTerms[row.key] ?? "";
                             const inputValue = activeAllTemplateRow === row.key ? searchTerm : selectedOption?.label ?? "";
                             const options = activeAllTemplateRow === row.key ? filteredAllTemplateOptions(row.key) : [];
                             return (
-                              <article key={row.key} className="all-process-row">
+                              <article key={row.key} className={`all-process-row ${isUnmatched ? "unmatched" : ""}`}>
                                 <div className="all-process-row-main">
                                   <div className="all-process-sequence">{row.item.sequence || "-"}</div>
                                   <div className="all-process-title">
                                     <strong>{row.item.title || "未命名文件"}</strong>
-                                    <span>{row.item.fileCode || "/"}</span>
+                                    <span>
+                                      {row.item.fileCode || "/"}
+                                      {isUnmatched ? <em className="all-process-unmatched-badge">未匹配</em> : null}
+                                    </span>
                                   </div>
                                 </div>
                                 <div className={`template-combobox ${selectedOption ? "selected" : ""} ${isSkipped ? "skipped" : ""}`}>
@@ -1267,19 +1531,11 @@ function App() {
                   </button>
                 </div>
               </div>
-            </section>
-          </section>
-        </section>
-      ) : null}
+            </div>
+          ) : null}
 
-      {activeTab === SWITCH_STATION_TAB ? (
-        <section className="tab-panel">
-          {controlBand}
-
-          <section className="workspace">
-            {recordPane}
-
-            <section className="detail-pane">
+          {activeTab === SWITCH_STATION_TAB ? (
+            <div className="detail-pane">
               <div className="tool-section">
                 <div className="section-heading">
                   <FolderTree size={19} />
@@ -1327,19 +1583,11 @@ function App() {
                   </button>
                 </div>
               </div>
-            </section>
-          </section>
-        </section>
-      ) : null}
+            </div>
+          ) : null}
 
-      {activeTab === COLLECTOR_LINE_TAB ? (
-        <section className="tab-panel">
-          {controlBand}
-
-          <section className="workspace">
-            {recordPane}
-
-            <section className="detail-pane">
+          {activeTab === COLLECTOR_LINE_TAB ? (
+            <div className="detail-pane">
               <div className="tool-section">
                 <div className="section-heading">
                   <FolderTree size={19} />
@@ -1387,9 +1635,278 @@ function App() {
                   </button>
                 </div>
               </div>
+            </div>
+          ) : null}
+        </section>
+      </section>
+
+      {isTemplateManagerOpen ? (
+        <div className="modal-backdrop" onClick={() => setIsTemplateManagerOpen(false)}>
+          <section
+            className="template-manager-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="template-manager-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-heading">
+              <div className="section-heading">
+                <Settings2 size={19} />
+                <h2 id="template-manager-title">模板管理</h2>
+              </div>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="secondary-button modal-nav-button"
+                  onClick={() => setIsTemplateGuideOpen(true)}
+                >
+                  <Info size={15} />
+                  导入教程
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button modal-nav-button"
+                  onClick={() => void importProcessTemplates()}
+                  disabled={isImportingProcessTemplate}
+                >
+                  {isImportingProcessTemplate ? <Loader2 className="spin" size={15} /> : <Upload size={15} />}
+                  导入模板
+                </button>
+                <button className="icon-button" onClick={() => setIsTemplateManagerOpen(false)} title="关闭" aria-label="关闭模板管理">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <section className="template-directory-section" aria-label="当前模板目录">
+              <div className="template-section-heading">
+                <span>当前模板目录</span>
+                <span>{filteredTemplateDirectoryEntries.length} / {templateDirectoryEntries.length} 个模板</span>
+              </div>
+              <label className="template-directory-search">
+                <Search size={15} />
+                <input
+                  value={templateDirectoryQuery}
+                  onChange={(event) => setTemplateDirectoryQuery(event.currentTarget.value)}
+                  placeholder="搜索模板名称、来源、类型或路径"
+                />
+              </label>
+              {templateDirectoryError ? (
+                <div className="template-directory-error">{templateDirectoryError}</div>
+              ) : null}
+              <div className="template-directory-list">
+                {templateDirectoryEntries.length === 0 ? (
+                  <div className="empty-state detail-empty">暂无模板</div>
+                ) : filteredTemplateDirectoryEntries.length === 0 ? (
+                  <div className="empty-state detail-empty">没有匹配的模板</div>
+                ) : (
+                  filteredTemplateDirectoryEntries.map((entry) => (
+                    <div key={entry.key} className="template-directory-row">
+                      <div className="template-directory-name">
+                        <strong>{entry.name}</strong>
+                        <span>
+                          {entry.source} · {entry.kind}
+                        </span>
+                      </div>
+                      <code>{entry.path || "内置模板路径加载中"}</code>
+                      <button
+                        type="button"
+                        className="template-dir-button"
+                        onClick={() => void openTemplateDirectory(entry)}
+                        disabled={!entry.path}
+                      >
+                        <FolderOpen size={14} />
+                        打开目录
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="template-user-config-section" aria-label="导入模板配置">
+              <div className="template-section-heading">
+                <span>导入模板配置</span>
+                <span>{userProcessTemplates.length} 个导入模板</span>
+              </div>
+              {userProcessTemplates.length === 0 ? (
+                <div className="empty-state detail-empty">导入模板后可在这里填写匹配配置</div>
+              ) : (
+                <div className="template-manager-list">
+                  {userProcessTemplates.map((template) => {
+                    const key = userTemplateKey(template);
+                    const draft = templateDrafts[key] ?? draftFromUserTemplate(template);
+                    const isSaving = Boolean(savingTemplateKeys[key]);
+                    const isDeleting = Boolean(deletingTemplateKeys[key]);
+                    return (
+                      <article key={key} className={`template-manager-item ${draft.enabled ? "" : "disabled"}`}>
+                        <div className="template-manager-item-heading">
+                          <div>
+                            <strong>{template.templateFile}</strong>
+                            <span>{template.userTemplatePath}</span>
+                          </div>
+                          <label className="template-enabled-toggle">
+                            <input
+                              type="checkbox"
+                              checked={draft.enabled}
+                              onChange={(event) => updateTemplateDraft(template, { enabled: event.currentTarget.checked })}
+                            />
+                            启用
+                          </label>
+                        </div>
+                        <div className="template-manager-grid">
+                          <label className="text-field">
+                            <span>显示名称</span>
+                            <input
+                              value={draft.displayName}
+                              onChange={(event) => updateTemplateDraft(template, { displayName: event.currentTarget.value })}
+                            />
+                          </label>
+                          <label className="text-field">
+                            <span>所属模块</span>
+                            <select
+                              value={draft.templateModule}
+                              onChange={(event) =>
+                                updateTemplateDraft(template, { templateModule: event.currentTarget.value as ProcessTemplateModule })
+                              }
+                            >
+                              <option value="process">过程资料</option>
+                              <option value="switch-station">开关站电气设备安装</option>
+                              <option value="collector-line">集电线路安装工程</option>
+                            </select>
+                          </label>
+                          <label className="text-field">
+                            <span>模板分类</span>
+                            <select
+                              value={draft.category}
+                              onChange={(event) =>
+                                updateTemplateDraft(template, { category: event.currentTarget.value as ProcessTemplateCategoryId | "" })
+                              }
+                            >
+                              <option value="">自动识别</option>
+                              {PROCESS_TEMPLATE_CATEGORIES.map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="text-field">
+                            <span>关键词模式</span>
+                            <select
+                              value={draft.matchMode}
+                              onChange={(event) =>
+                                updateTemplateDraft(template, { matchMode: event.currentTarget.value as ProcessTemplateMatchMode })
+                              }
+                            >
+                              <option value="any">任一命中</option>
+                              <option value="all">全部命中</option>
+                            </select>
+                          </label>
+                        </div>
+                        <label className="text-field template-keyword-field">
+                          <span>匹配关键词</span>
+                          <textarea
+                            value={draft.matchKeywordsText}
+                            onChange={(event) => updateTemplateDraft(template, { matchKeywordsText: event.currentTarget.value })}
+                            placeholder="每行一个关键词，也可以用逗号分隔；留空时按模板文件名自动匹配"
+                          />
+                        </label>
+                        <div className="template-manager-actions">
+                          <button
+                            type="button"
+                            className="secondary-button modal-nav-button"
+                            onClick={() => void deleteProcessTemplate(template)}
+                            disabled={isDeleting || isSaving}
+                          >
+                            {isDeleting ? <Loader2 className="spin" size={15} /> : <Trash2 size={15} />}
+                            删除
+                          </button>
+                          <button
+                            type="button"
+                            className="primary-button modal-nav-button"
+                            onClick={() => void saveUserProcessTemplate(template)}
+                            disabled={isSaving || isDeleting}
+                          >
+                            {isSaving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}
+                            保存
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           </section>
-        </section>
+        </div>
+      ) : null}
+
+      {isTemplateGuideOpen ? (
+        <div className="modal-backdrop" onClick={() => setIsTemplateGuideOpen(false)}>
+          <section
+            className="template-guide-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="template-guide-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-heading">
+              <div className="section-heading">
+                <Info size={19} />
+                <h2 id="template-guide-title">导入教程</h2>
+              </div>
+              <button className="icon-button" onClick={() => setIsTemplateGuideOpen(false)} title="关闭" aria-label="关闭导入教程">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="template-guide-section">
+              <div className="template-guide-card">
+                <div className="template-section-heading">
+                  <span>导入步骤</span>
+                </div>
+                <ol className="template-guide-list">
+                  {TEMPLATE_IMPORT_STEPS.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </div>
+              <div className="template-guide-card">
+                <div className="template-section-heading">
+                  <span>可填写配置</span>
+                </div>
+                <ul className="template-guide-list">
+                  {TEMPLATE_CONFIG_FIELDS.map((field) => (
+                    <li key={field}>{field}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="template-guide-card">
+                <div className="template-section-heading">
+                  <span>常用占位符</span>
+                </div>
+                <div className="placeholder-grid">
+                  {PROCESS_TEMPLATE_PLACEHOLDERS.map((placeholder) => {
+                    const placeholderText = `{{${placeholder}}}`;
+                    const isCopied = copiedPlaceholder === placeholderText;
+                    return (
+                      <button
+                        key={placeholder}
+                        type="button"
+                        className={`placeholder-copy ${isCopied ? "copied" : ""}`}
+                        onClick={() => void copyPlaceholder(placeholderText)}
+                        title={`复制 ${placeholderText}`}
+                      >
+                        <code>{placeholderText}</code>
+                        <span>{isCopied ? "已复制" : "复制"}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
       ) : null}
 
       {isProcessInfoModalOpen ? (

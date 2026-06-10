@@ -12,7 +12,7 @@ import { inspectionApplicationFullSubject, replaceBusinessText, stripProjectPref
 import type { ProcessTemplateModule, ProcessUserFields, ResolvedProcessFields } from "./types";
 import { archiveProjectCode, formatChineseDate, toArrayBuffer } from "./utils";
 import { clearAfterLabel, fillAfterLabel, fillAfterLabelExcept, fillOrClearAfterLabelInRow, isMergedSlave, rowHasExactLabel } from "./workbookCells";
-import { fillRandomSelfCheckValues } from "./qualitySelfCheck";
+import { fillRandomSelfCheckValues, qualityResultTextForStandard } from "./qualitySelfCheck";
 
 export async function renderProcessWorkbook(
   template: ArrayBuffer | Uint8Array,
@@ -49,7 +49,7 @@ function applyWorkbookValues(
         return;
       }
       if (typeof cell.value === "string") {
-        cell.value = replaceBusinessText(cell.value, record, item, userFields);
+        cell.value = replaceWorkbookQualityPlaceholders(replaceBusinessText(cell.value, record, item, userFields));
       }
     });
   }
@@ -70,6 +70,13 @@ function applyWorkbookValues(
   );
 }
 
+function replaceWorkbookQualityPlaceholders(value: string): string {
+  return value.replace(
+    /\{\{\s*(?:质量验收结果|质量检查验收结果|施工单位自检记录)\s*[:：]\s*([^{}]+?)\s*}}/g,
+    (match, standard: string) => qualityResultTextForStandard(standard) ?? match,
+  );
+}
+
 function fillInspectionLotProjectNames(sheet: ExcelJS.Worksheet, record: ArchiveRecord, item: ArchiveItem, isSwitchStation: boolean) {
   if (!item.title.includes("检验批质量验收记录")) {
     return;
@@ -77,7 +84,7 @@ function fillInspectionLotProjectNames(sheet: ExcelJS.Worksheet, record: Archive
 
   const context = isSwitchStation ? switchStationInspectionLotContext(record, item) : inspectionLotContext(record, item);
   fillAfterLabel(sheet, ["单位（子单位）工程名称"], context.unitProjectName);
-  fillAfterLabel(sheet, ["分部（子分部）工程名称"], context.divisionName);
+  fillAfterLabel(sheet, ["分部（子分部）工程名称", "分部工程名称"], context.divisionName);
   fillAfterLabel(sheet, ["分项工程名称"], context.subitemName);
 }
 
@@ -94,11 +101,12 @@ function inspectionLotContext(record: ArchiveRecord, item: ArchiveItem): {
   const beforeItems = record.items.slice(0, record.items.indexOf(item)).reverse();
   const division = beforeItems.find((candidate) => isDivisionQualityItem(candidate.title));
   const subitem = beforeItems.find((candidate) => isSubitemQualityItem(candidate.title));
+  const subitemName = subitem ? qualitySubject(subitem.title).replace(/\s*分项工程\s*$/, "").trim() : inspectionLotSubitemName(item.title);
 
   return {
     unitProjectName: unitProjectNameFromRecord(record),
-    divisionName: division ? qualitySubject(division.title).replace(/\s*分部工程\s*$/, "").trim() : "",
-    subitemName: subitem ? qualitySubject(subitem.title).replace(/\s*分项工程\s*$/, "").trim() : inspectionLotSubitemName(item.title),
+    divisionName: division ? qualitySubject(division.title).replace(/\s*分部工程\s*$/, "").trim() : divisionNameFromRecord(record, subitemName || item.title),
+    subitemName,
   };
 }
 
@@ -106,7 +114,27 @@ function unitProjectNameFromRecord(record: ArchiveRecord): string {
   return record.volumeTitle
     .split(/[，,、]/u)[0]
     ?.replace(/\s*开工报审.*$/u, "")
+    .replace(/\s*子单位工程\s*$/u, "")
     .trim() || record.projectName;
+}
+
+function divisionNameFromRecord(record: ArchiveRecord, hint: string): string {
+  const divisionNames = record.volumeTitle
+    .split(/[，,、]/u)
+    .map((part) => part.trim())
+    .filter((part) => part.includes("分部"))
+    .map((part) => part
+      .replace(/\s*开工报审.*$/u, "")
+      .replace(/\s*分部工程.*$/u, "")
+      .replace(/\s*分部.*$/u, "")
+      .trim())
+    .filter(Boolean);
+  const electricalLineDivision = divisionNames.find((name) => name.includes("电气线路安装"));
+  if ((hint.includes("电气二次系统") || hint.includes("直流配电柜")) && electricalLineDivision) {
+    return electricalLineDivision;
+  }
+
+  return divisionNames.length === 1 ? divisionNames[0] : "";
 }
 
 function qualitySubject(title: string): string {

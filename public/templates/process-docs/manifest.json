@@ -373,6 +373,13 @@
       "outputExtension": ".xlsx"
     },
     {
+      "sequence": 0,
+      "kind": "xlsx",
+      "originalName": "直流配电柜检验批质量验收记录.xlsx",
+      "templateFile": "直流配电柜检验批质量验收记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
       "sequence": 9,
       "kind": "xlsx",
       "originalName": "9、5028G01-SG-ZHHC-03-04-001交直流控制电源系统设备安装分部工程质量验收评定表.xlsx",
@@ -664,6 +671,13 @@
       "kind": "xlsx",
       "originalName": "17、5028G01-SG-ZHHC-02-02-01-001电缆桥架安装分项质量检查验收评定表（桥架制安）.xlsx",
       "templateFile": "电缆桥架安装分项质量检查验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 0,
+      "kind": "xlsx",
+      "originalName": "电缆线路施工安装分项质量检查验收评定表.xlsx",
+      "templateFile": "电缆线路施工安装分项质量检查验收评定表.xlsx",
       "outputExtension": ".xlsx"
     },
     {

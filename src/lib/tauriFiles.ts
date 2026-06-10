@@ -41,6 +41,14 @@ export async function importProcessTemplate(sourcePath: string): Promise<Importe
   return invoke<ImportedProcessTemplate>("import_process_template", { sourcePath });
 }
 
+export async function updateUserProcessTemplate(template: ProcessTemplate): Promise<ProcessTemplate> {
+  return invoke<ProcessTemplate>("update_user_process_template", { template });
+}
+
+export async function deleteUserProcessTemplate(path: string): Promise<void> {
+  await invoke("delete_user_process_template", { path });
+}
+
 function validateOfficeFile(path: string, bytes: Uint8Array) {
   const lowerPath = path.toLowerCase();
   if (!lowerPath.endsWith(".docx") && !lowerPath.endsWith(".xlsx")) {

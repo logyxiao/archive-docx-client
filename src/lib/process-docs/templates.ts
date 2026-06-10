@@ -53,15 +53,15 @@ export function matchingTemplatesByTitle(
   templateModule: ProcessTemplateModule = "process",
 ): ProcessTemplate[] {
   const title = item.title;
-  const activeTemplates = templates.filter((template) => isTemplateInModule(template, templateModule));
+  const activeTemplates = templates.filter((template) => template.enabled !== false && isTemplateInModule(template, templateModule));
   const userTemplates = matchingUserTemplates(title, activeTemplates);
 
   if (isStartReportItemTitle(title)) {
-    return withUserTemplates(findByTemplateFiles(activeTemplates, ["开工报审.docx"]), userTemplates);
+    return withPreferredUserTemplates(userTemplates, findByTemplateFiles(activeTemplates, ["开工报审.docx"]));
   }
 
   if (templateModule === "collector-line") {
-    return withUserTemplates(findByTemplateFiles(activeTemplates, collectorLineTemplatesForItem(item)), userTemplates);
+    return withPreferredUserTemplates(userTemplates, findByTemplateFiles(activeTemplates, collectorLineTemplatesForItem(item)));
   }
 
   if (isSubunitQualityItemTitle(title)) {
@@ -74,26 +74,26 @@ export function matchingTemplatesByTitle(
     if (title.includes("及验收记录")) {
       templateFiles.push(qualityTemplate);
     }
-    return withUserTemplates(findByTemplateFiles(activeTemplates, templateFiles), userTemplates);
+    return withPreferredUserTemplates(userTemplates, findByTemplateFiles(activeTemplates, templateFiles));
   }
 
   if (isHiddenWorkQualityTitle(title)) {
-    return withUserTemplates(matchingHiddenWorkTemplates(title, activeTemplates), userTemplates);
+    return withPreferredUserTemplates(userTemplates, matchingHiddenWorkTemplates(title, activeTemplates));
   }
 
   if (isDivisionQualityApplicationTitle(title)) {
-    return withUserTemplates(matchingDivisionTemplates(title, activeTemplates), userTemplates);
+    return withPreferredUserTemplates(userTemplates, matchingDivisionTemplates(title, activeTemplates));
   }
 
   if (isSubitemQualityApplicationTitle(title) || isSubitemQualityRecordTitle(title)) {
-    return withUserTemplates(matchingSubitemTemplates(title, activeTemplates), userTemplates);
+    return withPreferredUserTemplates(userTemplates, matchingSubitemTemplates(title, activeTemplates));
   }
 
   if (title.includes("检验批质量验收记录")) {
-    return withUserTemplates(matchingInspectionLotTemplates(title, activeTemplates), userTemplates);
+    return withPreferredUserTemplates(userTemplates, matchingInspectionLotTemplates(title, activeTemplates));
   }
 
-  return withUserTemplates(matchingConstructionRecordTemplates(title, activeTemplates), userTemplates);
+  return withPreferredUserTemplates(userTemplates, matchingConstructionRecordTemplates(title, activeTemplates));
 }
 
 function mergeProcessTemplates(builtInTemplates: ProcessTemplate[], userTemplates: ProcessTemplate[]): ProcessTemplate[] {
@@ -109,14 +109,14 @@ function mergeProcessTemplates(builtInTemplates: ProcessTemplate[], userTemplate
   return result;
 }
 
-function withUserTemplates(baseTemplates: ProcessTemplate[], userTemplates: ProcessTemplate[]): ProcessTemplate[] {
+function withPreferredUserTemplates(userTemplates: ProcessTemplate[], baseTemplates: ProcessTemplate[]): ProcessTemplate[] {
   if (userTemplates.length === 0) {
     return baseTemplates;
   }
 
-  const result = [...baseTemplates];
+  const result = [...userTemplates];
   const seen = new Set(result.map(templateIdentity));
-  for (const template of userTemplates) {
+  for (const template of baseTemplates) {
     const identity = templateIdentity(template);
     if (seen.has(identity)) {
       continue;
@@ -134,15 +134,39 @@ function matchingUserTemplates(title: string, templates: ProcessTemplate[]): Pro
   }
 
   return templates.filter((template) => {
-    if (!template.userTemplatePath) {
+    if (!template.userTemplatePath || template.enabled === false) {
       return false;
     }
+
+    const keywords = normalizeTemplateKeywords(template.matchKeywords);
+    if (keywords.length > 0) {
+      return template.matchMode === "all"
+        ? keywords.every((keyword) => normalizedTitle.includes(keyword))
+        : keywords.some((keyword) => normalizedTitle.includes(keyword));
+    }
+
     return [template.templateFile, template.originalName].some((name) => {
       const normalizedTemplateName = normalizeTemplateMatchText(fileNameWithoutExtension(name));
       return normalizedTemplateName.length >= 2
         && (normalizedTitle.includes(normalizedTemplateName) || normalizedTemplateName.includes(normalizedTitle));
     });
   });
+}
+
+function normalizeTemplateKeywords(keywords: string[] | undefined): string[] {
+  if (!Array.isArray(keywords)) {
+    return [];
+  }
+
+  const result: string[] = [];
+  for (const keyword of keywords) {
+    const normalized = normalizeTemplateMatchText(keyword);
+    if (!normalized || result.includes(normalized)) {
+      continue;
+    }
+    result.push(normalized);
+  }
+  return result;
 }
 
 function fileNameWithoutExtension(value: string): string {
@@ -200,6 +224,8 @@ function matchingSubitemTemplates(title: string, templates: ProcessTemplate[]): 
     ["干式变压器安装", "干式变压器安装分项工程质量验收表.xlsx"],
     ["屋外接地装置安装", "屋外接地装置安装分项工程质量验收表.xlsx"],
     ["屋内接地装置安装", "屋内接地装置安装分项工程质量验收表.xlsx"],
+    ["电缆线路施工安装", "电缆线路施工安装分项质量检查验收评定表.xlsx"],
+    ["电缆桥架制作及安装", "电缆桥架安装分项质量检查验收评定表.xlsx"],
     ["电缆桥架安装", "电缆桥架安装分项质量检查验收评定表.xlsx"],
     ["电缆敷设分项工程质量", "电缆敷设分项工程质量检查验收评定表.xlsx"],
     ["电缆终端制作", "电力电缆终端制作安装分项工程质量验收表.xlsx"],
@@ -272,6 +298,10 @@ function matchingInspectionLotTemplates(title: string, templates: ProcessTemplat
 }
 
 function inspectionLotTemplateFilesForTitle(title: string): string[] {
+  if (title.includes("直流配电柜检验批质量验收记录")) {
+    return ["直流配电柜检验批质量验收记录.xlsx"];
+  }
+
   const switchStationTemplate = firstMatchingTemplateFile(title, [
     ["定位放线", "定位放线工程检验批质量验收记录.xlsx"],
     ["土方开挖", "土方开挖检验批质量验收记录.xlsx"],
@@ -394,6 +424,10 @@ function firstMatchingTemplateFile(title: string, pairs: Array<[string, string]>
 }
 
 export function isTemplateInModule(template: ProcessTemplate, templateModule: ProcessTemplateModule): boolean {
+  if (template.userTemplatePath && template.templateModule) {
+    return template.templateModule === templateModule;
+  }
+
   if (templateModule === "switch-station") {
     return COMMON_PROCESS_TEMPLATE_FILES.has(template.templateFile) || isSwitchStationTemplate(template);
   }

@@ -164,7 +164,7 @@ export function allProcessTemplateOptions(templates: ProcessTemplate[]): Process
   return dedupeTemplateMatches(
     PROCESS_TEMPLATE_MODULES.flatMap((templateModule) =>
       templates
-        .filter((template) => isTemplateInModule(template, templateModule))
+        .filter((template) => template.enabled !== false && isTemplateInModule(template, templateModule))
         .map((template) => ({ templateModule, template })),
     ),
   );

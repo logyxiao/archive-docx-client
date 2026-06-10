@@ -19,7 +19,7 @@ export function collectorLineTemplatesForItem(item: ArchiveItem): string[] {
   if (title.includes("集电线路安装工程分部开工报审")) {
     return ["开工报审.docx"];
   }
-  if (title.includes("集电线路安装工程分部工程质量")) {
+  if (/集电线路安装(?:工程)?分部工程质量/.test(title)) {
     return ["集电线路安装工程分部工程报验申请单.docx", "集电线路安装工程分部工程质量验收评定表.xlsx"];
   }
   if (title.includes("直埋电缆敷设分项工程质量")) {

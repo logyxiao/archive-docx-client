@@ -11,7 +11,9 @@ import {
   renderProcessDocx,
   renderProcessWorkbook,
   renderSummaryWorkbook,
+  type ProcessTemplate,
 } from "../lib/processDocs";
+import { replaceTemplatePlaceholders } from "../lib/process-docs/textReplacement";
 import type { ArchiveRecord } from "../lib/types";
 
 const processRecord = createProcessRecord();
@@ -160,6 +162,89 @@ describe("process docs generation", () => {
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
       expect(fileNames(paths)).toEqual(["99、5028G01-SG-ZHHC-TEST-099高明分布式项目 需要人工选择模板的文件.docx"]);
+    });
+
+    it("prioritizes enabled user templates by configured keywords", () => {
+      const record = createSuixiGridConnectedElectricalRecord();
+      const item = record.items[0];
+      const userTemplate: ProcessTemplate = {
+        sequence: 0,
+        kind: "docx",
+        originalName: "自定义电缆终端制作模板.docx",
+        templateFile: "自定义电缆终端制作模板.docx",
+        outputExtension: ".docx",
+        userTemplatePath: "/tmp/process-templates/自定义电缆终端制作模板.docx",
+        displayName: "自定义电缆终端制作模板",
+        matchKeywords: ["电缆终端制作"],
+        matchMode: "any",
+        templateModule: "process",
+        enabled: true,
+      };
+      const builtInTemplate: ProcessTemplate = {
+        sequence: 0,
+        kind: "xlsx",
+        originalName: "电力电缆终端制作安装分项工程质量验收表.xlsx",
+        templateFile: "电力电缆终端制作安装分项工程质量验收表.xlsx",
+        outputExtension: ".xlsx",
+      };
+
+      const matches = matchingAllProcessTemplates(record, item, [builtInTemplate, userTemplate]);
+
+      expect(matches.map((match) => match.template.templateFile)).toEqual([
+        "自定义电缆终端制作模板.docx",
+        "电力电缆终端制作安装分项工程质量验收表.xlsx",
+      ]);
+    });
+
+    it("ignores disabled user templates and supports legacy filename matching", () => {
+      const item = {
+        ...processRecord.items[4],
+        title: "高明分布式项目 需要人工选择模板的文件",
+      };
+      const record = { ...processRecord, items: [item] };
+      const disabledTemplate: ProcessTemplate = {
+        sequence: 0,
+        kind: "docx",
+        originalName: "需要人工选择模板.docx",
+        templateFile: "需要人工选择模板.docx",
+        outputExtension: ".docx",
+        userTemplatePath: "/tmp/process-templates/需要人工选择模板.docx",
+        matchKeywords: ["需要人工选择模板"],
+        templateModule: "process",
+        enabled: false,
+      };
+      const legacyTemplate: ProcessTemplate = {
+        sequence: 0,
+        kind: "docx",
+        originalName: "需要人工选择模板.docx",
+        templateFile: "需要人工选择模板.docx",
+        outputExtension: ".docx",
+        userTemplatePath: "/tmp/process-templates/legacy/需要人工选择模板.docx",
+      };
+
+      const matches = matchingAllProcessTemplates(record, item, [disabledTemplate, legacyTemplate]);
+
+      expect(matches.map((match) => match.template.userTemplatePath)).toEqual([
+        "/tmp/process-templates/legacy/需要人工选择模板.docx",
+      ]);
+    });
+
+    it("requires every keyword when user templates use all-keyword matching", () => {
+      const record = createSuixiGridConnectedElectricalRecord();
+      const item = record.items[0];
+      const template: ProcessTemplate = {
+        sequence: 0,
+        kind: "docx",
+        originalName: "严格匹配模板.docx",
+        templateFile: "严格匹配模板.docx",
+        outputExtension: ".docx",
+        userTemplatePath: "/tmp/process-templates/严格匹配模板.docx",
+        matchKeywords: ["电缆终端制作", "不存在关键词"],
+        matchMode: "all",
+        templateModule: "process",
+      };
+
+      expect(matchingAllProcessTemplates(record, item, [template])).toEqual([]);
     });
 
     it("uses the shared start-report template when the item title contains start report text", async () => {
@@ -556,6 +641,47 @@ describe("process docs generation", () => {
       expect(templateFilesForSequence("14")).not.toContain("建筑电气工程分项工程质量验收记录.xlsx");
       expect(templateFilesForSequence("15")[0]).toBe("光伏升压变电缆防火阻燃施工分项工程质量验收表.xlsx");
       expect(templateFilesForSequence("16")[0]).toBe("二次回路检查及控制电缆接线分项工程质量检查验收评定表.xlsx");
+      const cableTrayFabricationMatches = matchingAllProcessTemplates(
+        suixiRecord,
+        {
+          ...suixiRecord.items[3],
+          title: "遂溪分布式项目 电缆桥架制作及安装分项工程质量报验申请及验收记录",
+        },
+        manifest.templates,
+      ).map((match) => match.template.templateFile);
+      expect(cableTrayFabricationMatches[0]).toBe("电缆桥架安装分项质量检查验收评定表.xlsx");
+      expect(cableTrayFabricationMatches).toContain("分项工程报验申请单.docx");
+      const cableLineItem = {
+        ...suixiRecord.items[3],
+        title: "遂溪分布式项目 电缆线路施工安装分项工程质量报验申请及验收记录",
+      };
+      const cableLineMatches = matchingAllProcessTemplates(
+        suixiRecord,
+        cableLineItem,
+        manifest.templates,
+      ).map((match) => match.template.templateFile);
+      expect(cableLineMatches[0]).toBe("电缆线路施工安装分项质量检查验收评定表.xlsx");
+      expect(cableLineMatches).toContain("分项工程报验申请单.docx");
+      expect(cableLineMatches).not.toContain("电缆桥架安装分项质量检查验收评定表.xlsx");
+      const cableLineTemplate = readPublic("/templates/process-docs/电缆线路施工安装分项质量检查验收评定表.xlsx");
+      const cableLineWorkbook = await workbookFrom(await renderProcessWorkbook(cableLineTemplate, suixiRecord, cableLineItem));
+      const cableLineSheet = cableLineWorkbook.getWorksheet("电缆线路施工安装")!;
+      expect(cellText(cableLineSheet.getCell("B2"))).toContain("电缆线路施工安装分项工程质量检查验收评定表");
+      expect(cableLineSheet.getCell("G9").value).toBe("电缆线路施工安装");
+      expect(templateFilesForSequence("17")).toEqual(["直流配电柜检验批质量验收记录.xlsx"]);
+      expect(templateFilesForSequence("18")).toEqual(["直流配电柜检验批质量验收记录.xlsx"]);
+      expect(matchingAllProcessTemplates(
+        suixiRecord,
+        {
+          ...suixiRecord.items[3],
+          title: "遂溪分布式项目 国恒部分直流配电柜安装检验批质量验收记录",
+        },
+        manifest.templates,
+      ).map((match) => match.template.templateFile)).not.toContain("直流配电柜检验批质量验收记录.xlsx");
+      expect(templateFilesForSequence("19")).toEqual([
+        "集电线路安装工程分部工程报验申请单.docx",
+        "集电线路安装工程分部工程质量验收评定表.xlsx",
+      ]);
 
       const result = await generateProcessDocs(
         [suixiRecord],
@@ -580,6 +706,49 @@ describe("process docs generation", () => {
       }
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
+
+      const lotWritten: Array<{ path: string; bytes: Uint8Array }> = [];
+      const lotResult = await generateProcessDocs(
+        [suixiRecord],
+        {
+          selectedCodes: [suixiRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          selectedTemplateCategories: ["inspection-lot-acceptance"],
+        },
+        async (path, bytes) => {
+          lotWritten.push({ path, bytes });
+        },
+      );
+      const lotNames = fileNames(lotWritten.map((item) => item.path));
+      const guohengEntry = lotWritten.find((item) => item.path.includes("国恒部分直流配电柜"));
+      const kundaEntry = lotWritten.find((item) => item.path.includes("坤达部分直流配电柜"));
+
+      expect(lotResult.files).toHaveLength(2);
+      expect(lotNames).toEqual(expect.arrayContaining([
+        "17、5028G02-SG-ZHHC-03-02-05-01-001国恒部分直流配电柜检验批质量验收记录.xlsx",
+        "18、5028G02-SG-ZHHC-03-02-05-02-001坤达部分直流配电柜检验批质量验收记录.xlsx",
+      ]));
+      expect(guohengEntry?.path).toBeTruthy();
+      expect(kundaEntry?.path).toBeTruthy();
+      for (const file of lotWritten) {
+        await expectValidOfficeFile(file.path, file.bytes);
+      }
+      const guohengWorkbook = await workbookFrom(guohengEntry!.bytes);
+      const guohengSheet = guohengWorkbook.getWorksheet("第1页")!;
+      const strictUpperValues = String(guohengSheet.getCell("V12").value).split(",").map(Number);
+
+      expect(cellText(guohengSheet.getCell("B2"))).toContain("国恒部分直流配电柜 检验批质量检查验收评定表");
+      expect(guohengSheet.getCell("F3").value).toBe("5028G02-0011");
+      expect(guohengSheet.getCell("G5").value).toBe("并网点光伏变电系统");
+      expect(guohengSheet.getCell("T5").value).toBe("子方阵电气线路安装");
+      expect(guohengSheet.getCell("AE5").value).toBe("4台");
+      expect(guohengSheet.getCell("G9").value).toBe("电气二次系统");
+      expect(strictUpperValues).toHaveLength(10);
+      expect(strictUpperValues.every((value) => Number.isFinite(value) && value >= 0 && value < 1.5)).toBe(true);
+      const kundaWorkbook = await workbookFrom(kundaEntry!.bytes);
+      expect(cellText(kundaWorkbook.getWorksheet("第1页")!.getCell("B2"))).toContain("坤达部分直流配电柜 检验批质量检查验收评定表");
+      expect(lotResult.skipped).toEqual([]);
+      expect(lotResult.errors).toEqual([]);
     });
 
     it("generates only selected process template categories", async () => {
@@ -876,6 +1045,24 @@ describe("process docs generation", () => {
     expect(xml).toContain("测试监理项目部");
     expect(xml).not.toContain("河南中核五院研究设计有限公司");
   });
+
+    it("replaces known placeholders and keeps unknown placeholders unchanged", () => {
+    const item = processRecord.items[0];
+    const text = replaceTemplatePlaceholders("{{项目名}} {{文件题名}} {{未知字段}}", processRecord, item, {
+      projectName: "测试自定义工程名称",
+    });
+    const suixiRecord = createSuixiGridConnectedElectricalRecord();
+    const inspectionLotItem = suixiRecord.items.find((entry) => entry.sequence === "17")!;
+    const subjectText = replaceTemplatePlaceholders(
+      "{{文件题名去项目}}|{{文件题名主题}}|{{验收项目名称}}",
+      suixiRecord,
+      inspectionLotItem,
+      {},
+    );
+
+    expect(text).toBe(`测试自定义工程名称 ${item.title} {{未知字段}}`);
+    expect(subjectText).toBe("国恒部分直流配电柜检验批质量验收记录|国恒部分直流配电柜|国恒部分直流配电柜");
+  });
   });
 
   describe("xlsx rendering", () => {
@@ -1065,7 +1252,7 @@ describe("process docs generation", () => {
     sheet.mergeCells("A2:B2");
     sheet.mergeCells("C2:L2");
     sheet.getCell("A1").value = "质量标准";
-    sheet.getCell("C1").value = "质量验收结果";
+    sheet.getCell("C1").value = "质量检查验收结果";
     sheet.getCell("A2").value = "不应大于±1°";
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -1075,6 +1262,67 @@ describe("process docs generation", () => {
     expect(values).toHaveLength(10);
     expect(values.every((value) => value === 0 || value === 1)).toBe(true);
     expect(new Set(values).size).toBe(2);
+  });
+
+    it("fills lower-bound quality standards in a bounded random range", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Sheet1");
+    sheet.mergeCells("A1:B1");
+    sheet.mergeCells("C1:L1");
+    sheet.mergeCells("A2:B2");
+    sheet.mergeCells("C2:L2");
+    sheet.getCell("A1").value = "质量标准";
+    sheet.getCell("C1").value = "质量验收结果";
+    sheet.getCell("A2").value = "≥6";
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const rendered = await workbookFrom(await renderProcessWorkbook(new Uint8Array(buffer), processRecord, processRecord.items[0]));
+    const values = String(rendered.worksheets[0].getCell("C2").value).split(",").map(Number);
+
+    expect(values).toHaveLength(10);
+    expect(values.every((value) => Number.isInteger(value) && value >= 6 && value <= 9)).toBe(true);
+    expect(new Set(values).size).toBeGreaterThan(1);
+  });
+
+    it("fills strict upper-bound quality standards in a bounded random range", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Sheet1");
+    sheet.mergeCells("A1:B1");
+    sheet.mergeCells("C1:L1");
+    sheet.mergeCells("A2:B2");
+    sheet.mergeCells("C2:L2");
+    sheet.getCell("A1").value = "质量标准";
+    sheet.getCell("C1").value = "质量验收结果";
+    sheet.getCell("A2").value = "<1.5mm/m";
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const rendered = await workbookFrom(await renderProcessWorkbook(new Uint8Array(buffer), processRecord, processRecord.items[0]));
+    const values = String(rendered.worksheets[0].getCell("C2").value).split(",").map(Number);
+
+    expect(values).toHaveLength(10);
+    expect(values.every((value) => Number.isFinite(value) && value >= 0 && value < 1.5)).toBe(true);
+    expect(new Set(values).size).toBeGreaterThan(1);
+  });
+
+    it("fills quality result placeholders from lower-bound standards", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Sheet1");
+    sheet.getCell("A1").value = "{{质量验收结果:≥6}}";
+    sheet.getCell("A2").value = "{{质量验收结果:6~10}}";
+    sheet.getCell("A3").value = "{{质量验收结果:<2}}";
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const rendered = await workbookFrom(await renderProcessWorkbook(new Uint8Array(buffer), processRecord, processRecord.items[0]));
+    const lowerValues = String(rendered.worksheets[0].getCell("A1").value).split(",").map(Number);
+    const rangeValues = String(rendered.worksheets[0].getCell("A2").value).split(",").map(Number);
+    const strictUpperValues = String(rendered.worksheets[0].getCell("A3").value).split(",").map(Number);
+
+    expect(lowerValues).toHaveLength(10);
+    expect(lowerValues.every((value) => Number.isInteger(value) && value >= 6 && value <= 9)).toBe(true);
+    expect(rangeValues).toHaveLength(10);
+    expect(rangeValues.every((value) => Number.isInteger(value) && value >= 6 && value <= 10)).toBe(true);
+    expect(strictUpperValues).toHaveLength(10);
+    expect(strictUpperValues.every((value) => Number.isFinite(value) && value >= 0 && value < 2)).toBe(true);
   });
 
     it("preserves inspection lot workbook print margins and scale", async () => {
@@ -1277,6 +1525,7 @@ function createSuixiGridConnectedElectricalRecord(): ArchiveRecord {
       item(16, "5028G02-SG-ZHHC-03-02-05-001", "遂溪分布式项目 电气二次系统分项工程质量报验申请及验收记录"),
       item(17, "5028G02-SG-ZHHC-03-02-05-01-001", "遂溪分布式项目 国恒部分直流配电柜检验批质量验收记录", "20250430"),
       item(18, "5028G02-SG-ZHHC-03-02-05-02-001", "遂溪分布式项目 坤达部分直流配电柜检验批质量验收记录", "20250430"),
+      item(19, "5028G02-SG-ZHHC-03-03-001", "遂溪分布式项目 集电线路安装分部工程质量报验申请及验收记录"),
     ],
   };
 }

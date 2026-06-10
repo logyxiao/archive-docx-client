@@ -59,6 +59,10 @@ function expandLegacyCategoryIds(categoryIds: readonly string[]): ProcessTemplat
 }
 
 export function getProcessTemplateCategory(template: ProcessTemplate): ProcessTemplateCategoryId {
+  if (template.category && PROCESS_TEMPLATE_CATEGORY_IDS.includes(template.category)) {
+    return template.category;
+  }
+
   const name = template.originalName;
 
   if (name.includes("开工报审")) {
