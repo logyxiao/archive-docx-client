@@ -23,13 +23,6 @@
       "outputExtension": ".docx"
     },
     {
-      "sequence": 3,
-      "kind": "docx",
-      "originalName": "3、5028G01-SG-ZHHC-KG-02高明分布式项目 子方阵支架及组件安装分部工程开工报审.docx",
-      "templateFile": "子方阵支架及组件安装分部工程开工报审.docx",
-      "outputExtension": ".docx"
-    },
-    {
       "sequence": 4,
       "kind": "docx",
       "originalName": "4、5028G01-SG-ZHHC-01-01-001子方阵电气安装分部工程分部（子分部）工程报验申请单.docx",
@@ -114,13 +107,6 @@
       "outputExtension": ".xlsx"
     },
     {
-      "sequence": 20,
-      "kind": "docx",
-      "originalName": "20、5028G01-SG-ZHHC-KG-03高明分布式项目 子方阵电气安装分部工程开工报审.docx",
-      "templateFile": "子方阵电气安装分部工程开工报审.docx",
-      "outputExtension": ".docx"
-    },
-    {
       "sequence": 21,
       "kind": "docx",
       "originalName": "21、5028G01-SG-ZHHC-01-02-001通用工程分部工程分部工程报验申请单.docx",
@@ -161,13 +147,6 @@
       "originalName": "28、组件接地检查记录.xlsx",
       "templateFile": "组件接地检查记录.xlsx",
       "outputExtension": ".xlsx"
-    },
-    {
-      "sequence": 29,
-      "kind": "docx",
-      "originalName": "29、5028G01-SG-ZHHC-KG-04高明分布式项目 主体结构工程分部开工报审.docx",
-      "templateFile": "主体结构工程分部开工报审.docx",
-      "outputExtension": ".docx"
     },
     {
       "sequence": 30,
@@ -532,13 +511,6 @@
       "originalName": "35、配电柜安装接地检查记录.xlsx",
       "templateFile": "配电柜安装接地检查记录.xlsx",
       "outputExtension": ".xlsx"
-    },
-    {
-      "sequence": 1,
-      "kind": "docx",
-      "originalName": "1、5028G01-SG-ZHHC-KG-15高明分布式项目 集电线路安装工程分部开工报审.docx",
-      "templateFile": "集电线路安装工程分部开工报审.docx",
-      "outputExtension": ".docx"
     },
     {
       "sequence": 2,

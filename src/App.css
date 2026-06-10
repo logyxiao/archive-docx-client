@@ -451,6 +451,17 @@ h2 {
   gap: 8px;
 }
 
+.all-template-summary {
+  min-height: 42px;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  padding: 11px 12px;
+  color: #2f3f4d;
+  background: #fbfcfd;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .template-check {
   display: flex;
   align-items: center;

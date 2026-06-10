@@ -271,12 +271,6 @@ function preserveProcessWorkbookPrintLayout(
 
 function forceOnePageWorksheetLayout(xml: string): string {
   let nextXml = upsertFitToPage(xml);
-  nextXml = insertSelfClosingElementIfMissing(
-    nextXml,
-    "pageMargins",
-    '<pageMargins left="0.3" right="0.3" top="0.3" bottom="0.3" header="0.2" footer="0.2"/>',
-    "</worksheet>",
-  );
   nextXml = upsertPageSetup(nextXml);
   return nextXml;
 }
@@ -371,19 +365,6 @@ function upsertSelfClosingElement(xml: string, tagName: string, elementXml: stri
   const existing = new RegExp(`<${tagName}\\b[^>]*/>`);
   if (existing.test(xml)) {
     return xml.replace(existing, elementXml);
-  }
-
-  const insertIndex = xml.indexOf(insertBefore);
-  if (insertIndex === -1) {
-    return xml;
-  }
-  return `${xml.slice(0, insertIndex)}${elementXml}${xml.slice(insertIndex)}`;
-}
-
-function insertSelfClosingElementIfMissing(xml: string, tagName: string, elementXml: string, insertBefore: string): string {
-  const existing = new RegExp(`<${tagName}\\b[^>]*/>`);
-  if (existing.test(xml)) {
-    return xml;
   }
 
   const insertIndex = xml.indexOf(insertBefore);

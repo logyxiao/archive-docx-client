@@ -37,12 +37,13 @@ export function matchingTemplatesByTitle(
 ): ProcessTemplate[] {
   const title = item.title;
   const activeTemplates = templates.filter((template) => isTemplateInModule(template, templateModule));
-  if (templateModule === "collector-line") {
-    return findByTemplateFiles(activeTemplates, collectorLineTemplatesForItem(item));
-  }
 
   if (isStartReportItemTitle(title)) {
     return findByTemplateFiles(activeTemplates, ["开工报审.docx"]);
+  }
+
+  if (templateModule === "collector-line") {
+    return findByTemplateFiles(activeTemplates, collectorLineTemplatesForItem(item));
   }
 
   if (isSubunitQualityItemTitle(title)) {
@@ -282,15 +283,21 @@ export function isTemplateInModule(template: ProcessTemplate, templateModule: Pr
 }
 
 export function isRecordInTemplateModule(record: ArchiveRecord, templateModule: ProcessTemplateModule): boolean {
-  const isSwitchStationRecord = isSwitchStationArchiveRecord(record);
-  const isCollectorRecord = isCollectorLineRecord(record);
   if (templateModule === "switch-station") {
-    return isSwitchStationRecord;
+    return isSwitchStationArchiveRecord(record);
   }
   if (templateModule === "collector-line") {
-    return isCollectorRecord;
+    return isCollectorLineRecord(record);
   }
-  return !isSwitchStationRecord && !isCollectorRecord;
+  return !isSwitchStationOnlyRecord(record) && !isCollectorLineOnlyRecord(record);
+}
+
+function isSwitchStationOnlyRecord(record: ArchiveRecord): boolean {
+  return record.archiveCode.includes("-8341-") || record.archiveCode.includes("-8342-");
+}
+
+function isCollectorLineOnlyRecord(record: ArchiveRecord): boolean {
+  return record.archiveCode.includes("-8331-");
 }
 
 function isSwitchStationTemplate(template: ProcessTemplate): boolean {

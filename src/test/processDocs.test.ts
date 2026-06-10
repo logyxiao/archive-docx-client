@@ -107,6 +107,7 @@ describe("process docs generation", () => {
             sequence: "5",
             fileCode: "5028G01-SG-ZHHC-KG-99",
             title: "高明分布式项目 光伏方阵安装子单位工程开工报审",
+            fileDate: "20250530",
           },
         ],
       };
@@ -130,12 +131,17 @@ describe("process docs generation", () => {
         },
       );
       const xml = await docxXml(written[0]);
+      const templateXml = await docxXml(readPublic("/templates/process-docs/开工报审.docx"));
 
       expect(result.files).toHaveLength(1);
       expect(paths[0]).toContain("开工报审");
       expect(xml).toContain("测试监理项目部");
       expect(xml).toContain("我方承担的</w:t>");
       expect(xml).toContain("<w:u w:val=\"single\"/></w:rPr><w:t xml:space=\"preserve\"> 测试工程 光伏方阵安装子单位工程 </w:t>");
+      expect(Array.from(xml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)).map((match) => match[1]).join("")).toContain(
+        "特申请于 2025 年 5 月 30 日开工",
+      );
+      expect(xml.match(/<w:pgMar[^>]+>/)?.[0]).toBe(templateXml.match(/<w:pgMar[^>]+>/)?.[0]);
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
     });
@@ -227,6 +233,7 @@ describe("process docs generation", () => {
       );
       const workbook = await workbookFrom(written[0]);
       const sheet = workbook.worksheets[0];
+      const sourceSheetXml = await xlsxXml(readPublic("/templates/process-docs/子单位工程质量验收记录.xlsx"), "xl/worksheets/sheet1.xml");
       const sheetXml = await xlsxXml(written[0], "xl/worksheets/sheet1.xml");
       const workbookXml = await xlsxXml(written[0], "xl/workbook.xml");
 
@@ -251,12 +258,7 @@ describe("process docs generation", () => {
       expect(sheet.pageSetup.orientation).toBe("portrait");
       expect(sheet.pageSetup.paperSize).toBe(9);
       expect(sheet.pageSetup.scale).toBe(100);
-      expect(sheet.pageSetup.margins).toMatchObject({
-        left: 0.786805555555556,
-        right: 0,
-        top: 0.590277777777778,
-        bottom: 0,
-      });
+      expect(sheetXml.match(/<pageMargins[^>]+>/)?.[0]).toBe(sourceSheetXml.match(/<pageMargins[^>]+>/)?.[0]);
       expect(sheetXml.indexOf("<pageMargins")).toBeLessThan(sheetXml.indexOf("<pageSetup"));
       expect(workbookXml).toContain('<definedName name="_xlnm.Print_Area" localSheetId="0">光伏方阵安装!$A$1:$AL$30</definedName>');
       expect(result.skipped).toEqual([]);
@@ -460,6 +462,72 @@ describe("process docs generation", () => {
       );
 
       expect(result.files).toEqual([]);
+      expect(result.skipped).toEqual([]);
+      expect(result.errors).toEqual([]);
+    });
+
+    it("does not force mixed 8312 records into the collector-line module only", async () => {
+      stubProcessFetch();
+      const mixedRecord: ArchiveRecord = {
+        ...processRecord,
+        fullTitle: `${processRecord.fullTitle}、集电线路安装分部工程质量验收记录文件`,
+        volumeTitle: `${processRecord.volumeTitle}、集电线路安装分部工程质量验收记录文件`,
+      };
+      const paths: string[] = [];
+
+      const result = await generateProcessDocs(
+        [mixedRecord],
+        {
+          selectedCodes: [mixedRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          templateModule: "process",
+          selectedTemplateCategories: ["start-report"],
+        },
+        async (path) => {
+          paths.push(path);
+        },
+      );
+
+      expect(result.files).toHaveLength(4);
+      expect(fileNames(paths).filter((name) => name.includes("开工报审"))).toHaveLength(4);
+      expect(paths.every((path) => path.includes("/过程资料/5028G01-0011-8312-001"))).toBe(true);
+      expect(result.skipped).toEqual([]);
+      expect(result.errors).toEqual([]);
+    });
+
+    it("still generates collector-line templates from mixed non-8331 records in the collector-line module", async () => {
+      stubProcessFetch();
+      const mixedRecord: ArchiveRecord = {
+        ...collectorLineRecord,
+        categoryCode: "8312",
+        archiveCode: "5028G01-0011-8312-004",
+        fullTitle: "中核汇能高明创楷3.58904MWp屋顶分布式光伏项目 子方阵电气安装分部、集电线路安装分部工程质量验收记录文件",
+        volumeTitle: "子方阵电气安装分部、集电线路安装分部工程质量验收记录文件",
+        items: [
+          {
+            ...collectorLineRecord.items[0],
+            title: "高明分布式项目 集电线路安装分部工程开工报审",
+          },
+        ],
+      };
+      const paths: string[] = [];
+
+      const result = await generateProcessDocs(
+        [mixedRecord],
+        {
+          selectedCodes: [mixedRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          templateModule: "collector-line",
+          selectedTemplateCategories: ["start-report"],
+        },
+        async (path) => {
+          paths.push(path);
+        },
+      );
+
+      expect(result.files).toHaveLength(1);
+      expect(fileNames(paths)[0]).toContain("集电线路安装分部工程开工报审");
+      expect(paths[0]).toContain("/集电线路安装工程/5028G01-0011-8312-004");
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
     });
@@ -876,11 +944,14 @@ describe("process docs generation", () => {
       const rendered = await workbookFrom(renderedBytes);
       const sourceZip = await JSZip.loadAsync(template);
       const renderedZip = await JSZip.loadAsync(renderedBytes);
+      const sourceSheetXml = await sourceZip.file("xl/worksheets/sheet1.xml")!.async("string");
+      const renderedSheetXml = await renderedZip.file("xl/worksheets/sheet1.xml")!.async("string");
 
       expect(rendered.worksheets[0].getCell("B2").style).toEqual(source.worksheets[0].getCell("B2").style);
       expect(rendered.worksheets[0].getCell("B2").isMerged).toBe(source.worksheets[0].getCell("B2").isMerged);
       expect(rendered.worksheets[0].getCell("C2").master.address).toBe(source.worksheets[0].getCell("C2").master.address);
       expect(await renderedZip.file("xl/styles.xml")!.async("string")).toBe(await sourceZip.file("xl/styles.xml")!.async("string"));
+      expect(renderedSheetXml.match(/<pageMargins[^>]+>/)?.[0]).toBe(sourceSheetXml.match(/<pageMargins[^>]+>/)?.[0]);
       expect(rendered.worksheets[0].getCell("G7").value).toBe("测试总承包单位");
       expect(rendered.worksheets[0].getCell("G8").value).toBe("测试施工单位");
       expect(rendered.worksheets[0].getCell("G9").value).toBe("测试分包单位");

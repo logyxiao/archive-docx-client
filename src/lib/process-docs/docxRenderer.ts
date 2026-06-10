@@ -64,6 +64,10 @@ function replaceDocxParagraphs(
       nextParagraph = replaceStartReportUnderlinedScope(nextParagraph, startReportScope(projectName, item.title));
     }
 
+    if (text.includes("特申请于") && text.includes("日开工")) {
+      nextParagraph = replaceStartReportDate(nextParagraph, item.fileDate);
+    }
+
     if (subunitName) {
       nextParagraph = replaceTextNodes(nextParagraph, "光伏方阵安装子单位工程", subunitName);
     }
@@ -119,6 +123,7 @@ function replaceStartReportUnderlinedScope(paragraph: string, scope: string): st
     }
 
     if (text.includes("，已完成了")) {
+      afterPrefix = false;
       return run;
     }
 
@@ -133,6 +138,46 @@ function replaceStartReportUnderlinedScope(paragraph: string, scope: string): st
 
     return replaceRunText(run, "");
   });
+}
+
+function replaceStartReportDate(paragraph: string, date: string): string {
+  const parts = compactDateParts(date);
+  if (!parts) {
+    return paragraph;
+  }
+
+  let afterTrigger = false;
+  let partIndex = 0;
+  return paragraph.replace(/<w:r\b[^>]*>[\s\S]*?<\/w:r>/g, (run) => {
+    const text = runText(run);
+    if (!afterTrigger) {
+      if (text.includes("特申请于")) {
+        afterTrigger = true;
+      }
+      return run;
+    }
+
+    if (partIndex >= parts.length || text.includes("日开工")) {
+      return run;
+    }
+
+    if (!/<w:u\b/.test(run)) {
+      return run;
+    }
+
+    const replacement = ` ${parts[partIndex]} `;
+    partIndex += 1;
+    return replaceRunText(run, replacement);
+  });
+}
+
+function compactDateParts(date: string): [string, string, string] | null {
+  const match = date.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  return [match[1], String(Number(match[2])), String(Number(match[3]))];
 }
 
 function replaceHiddenWorkSubjectText(text: string, title: string): string {
@@ -220,23 +265,7 @@ function ensurePreserveSpace(attrs: string): string {
 }
 
 function compactDocxPageLayout(xml: string): string {
-  return compactFormNoteParagraphs(compactSectionLayout(xml));
-}
-
-function compactSectionLayout(xml: string): string {
-  return xml
-    .replace(/<w:pgMar\b([^>]*)\/>/g, (_match, attrs: string) => {
-      const nextAttrs = setXmlAttributes(attrs, {
-        top: "720",
-        right: "1440",
-        bottom: "720",
-        left: "1440",
-        header: "425",
-        footer: "425",
-      });
-      return `<w:pgMar${nextAttrs}/>`;
-    })
-    .replace(/<w:docGrid\b([^>]*)\/>/g, (_match, attrs: string) => `<w:docGrid${setXmlAttributes(attrs, { linePitch: "276" })}/>`);
+  return compactFormNoteParagraphs(xml);
 }
 
 function compactFormNoteParagraphs(xml: string): string {

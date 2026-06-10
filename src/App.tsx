@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { ask, message as showDialogMessage, open } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
 import {
@@ -31,7 +30,7 @@ import {
   type ProcessTemplateCategoryId,
   type ProcessTemplateModule,
 } from "./lib/processDocs";
-import { readBinaryFile, writeBinaryFile } from "./lib/tauriFiles";
+import { openSystemPath, readBinaryFile, writeBinaryFile } from "./lib/tauriFiles";
 import type { ArchiveRecord } from "./lib/types";
 
 const DEFAULT_BACKUP_NOTE = "";
@@ -41,6 +40,7 @@ const PROCESS_TEMPLATE_CATEGORIES_KEY = "archive-docx-client:process-template-ca
 const SWITCH_STATION_TEMPLATE_CATEGORIES_KEY = "archive-docx-client:switch-station-template-categories";
 const COLLECTOR_LINE_TEMPLATE_CATEGORIES_KEY = "archive-docx-client:collector-line-template-categories";
 const ARCHIVE_DOCX_TAB = "archive-docx";
+const ALL_PROCESS_DOCS_TAB = "all-process-docs";
 const PROCESS_DOCS_TAB = "process-docs";
 const SWITCH_STATION_TAB = "switch-station-process-docs";
 const COLLECTOR_LINE_TAB = "collector-line-process-docs";
@@ -211,6 +211,7 @@ function App() {
     selectedCodes.length > 0 && Boolean(actualOutputDir) && selectedSwitchStationTemplateCategories.length > 0 && !isGeneratingProcess;
   const canGenerateCollectorLine =
     selectedCodes.length > 0 && Boolean(actualOutputDir) && selectedCollectorLineTemplateCategories.length > 0 && !isGeneratingProcess;
+  const canGenerateAllProcess = selectedCodes.length > 0 && Boolean(actualOutputDir) && !isGeneratingProcess;
   const previewIndex = previewRecord
     ? filteredRecords.findIndex((record) => record.archiveCode === previewRecord.archiveCode)
     : -1;
@@ -296,11 +297,11 @@ function App() {
     }
 
     try {
-      await openPath(targetDir);
+      await openSystemPath(targetDir);
     } catch (error) {
       if (targetDir !== outputDir) {
         try {
-          await openPath(outputDir);
+          await openSystemPath(outputDir);
           return;
         } catch (innerError) {
           await showOperationError(innerError);
@@ -472,19 +473,7 @@ function App() {
               ? selectedCollectorLineTemplateCategories
               : selectedProcessTemplateCategories,
           templateModule,
-          userFields: {
-            projectName: processProjectName.trim(),
-            generalContractorUnit: processGeneralContractorUnit.trim(),
-            generalContractorProjectManager: processGeneralContractorManager.trim(),
-            generalContractorTechnicalLeader: processGeneralContractorTechnicalLeader.trim(),
-            constructionUnit: processConstructionUnit.trim(),
-            constructionProjectManager: processConstructionManager.trim(),
-            constructionTechnicalLeader: processConstructionTechnicalLeader.trim(),
-            subcontractorUnit: processSubcontractorUnit.trim(),
-            subcontractorProjectManager: processSubcontractorManager.trim(),
-            subcontractorContent: processSubcontractorContent.trim(),
-            supervisionDepartment: processSupervisionDepartment.trim(),
-          },
+          userFields: processUserFields(),
         },
         writeBinaryFile,
       );
@@ -499,6 +488,71 @@ function App() {
     } finally {
       setIsGeneratingProcess(false);
     }
+  }
+
+  async function generateAllProcess() {
+    if (!canGenerateAllProcess) {
+      return;
+    }
+
+    setIsGeneratingProcess(true);
+
+    try {
+      const modules: ProcessTemplateModule[] = ["process", "switch-station", "collector-line"];
+      const summaries: string[] = [];
+      let generatedFileCount = 0;
+      const skipped: string[] = [];
+      const errors: string[] = [];
+
+      for (const templateModule of modules) {
+        const result = await generateProcessDocs(
+          records,
+          {
+            selectedCodes,
+            outputDir: actualOutputDir,
+            selectedTemplateCategories: [...PROCESS_TEMPLATE_CATEGORY_IDS],
+            templateModule,
+            userFields: processUserFields(),
+          },
+          writeBinaryFile,
+        );
+
+        generatedFileCount += result.files.length;
+        skipped.push(...result.skipped.map((item) => `${processModuleLabel(templateModule)}：${item}`));
+        errors.push(...result.errors.map((item) => `${processModuleLabel(templateModule)}：${item}`));
+        summaries.push(`${processModuleLabel(templateModule)} ${result.files.length} 个`);
+      }
+
+      const skippedText = skipped.length > 0 ? `\n跳过 ${skipped.length} 条：\n${skipped.slice(0, 12).join("\n")}` : "";
+      const errorText = errors.length > 0 ? `\n失败 ${errors.length} 个：\n${errors.slice(0, 12).join("\n")}` : "";
+      await showDialogMessage(
+        `全部过程资料生成完成：${generatedFileCount} 个文件。\n${summaries.join("；")}${skippedText}${errorText}`,
+        {
+          title: errors.length > 0 ? "生成完成" : "生成成功",
+          kind: errors.length > 0 ? "warning" : "info",
+        },
+      );
+    } catch (error) {
+      await showOperationError(error);
+    } finally {
+      setIsGeneratingProcess(false);
+    }
+  }
+
+  function processUserFields() {
+    return {
+      projectName: processProjectName.trim(),
+      generalContractorUnit: processGeneralContractorUnit.trim(),
+      generalContractorProjectManager: processGeneralContractorManager.trim(),
+      generalContractorTechnicalLeader: processGeneralContractorTechnicalLeader.trim(),
+      constructionUnit: processConstructionUnit.trim(),
+      constructionProjectManager: processConstructionManager.trim(),
+      constructionTechnicalLeader: processConstructionTechnicalLeader.trim(),
+      subcontractorUnit: processSubcontractorUnit.trim(),
+      subcontractorProjectManager: processSubcontractorManager.trim(),
+      subcontractorContent: processSubcontractorContent.trim(),
+      supervisionDepartment: processSupervisionDepartment.trim(),
+    };
   }
 
   function processModuleLabel(templateModule: ProcessTemplateModule): string {
@@ -606,6 +660,14 @@ function App() {
         >
           <FolderTree size={17} />
           过程资料生成
+        </button>
+        <button
+          className={`tab-button ${activeTab === ALL_PROCESS_DOCS_TAB ? "active" : ""}`}
+          onClick={() => setActiveTab(ALL_PROCESS_DOCS_TAB)}
+          type="button"
+        >
+          <FolderTree size={17} />
+          全部
         </button>
         <button
           className={`tab-button ${activeTab === SWITCH_STATION_TAB ? "active" : ""}`}
@@ -720,6 +782,49 @@ function App() {
                   <button className="generate-button" onClick={() => generateProcess("process")} disabled={!canGenerateProcess}>
                     {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
                     生成过程资料 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
+                  </button>
+                  <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
+                    <FolderOpen size={18} />
+                    打开输出目录
+                  </button>
+                </div>
+              </div>
+            </section>
+          </section>
+        </section>
+      ) : null}
+
+      {activeTab === ALL_PROCESS_DOCS_TAB ? (
+        <section className="tab-panel">
+          {controlBand}
+
+          <section className="workspace">
+            {recordPane}
+
+            <section className="detail-pane">
+              <div className="tool-section">
+                <div className="section-heading">
+                  <FolderTree size={19} />
+                  <h2>全部过程资料</h2>
+                </div>
+                <div className="process-info-actions">
+                  <button className="secondary-button process-info-button" type="button" onClick={() => setIsProcessInfoModalOpen(true)}>
+                    <SlidersHorizontal size={17} />
+                    填写生成信息
+                  </button>
+                </div>
+                <div className="process-template-section">
+                  <div className="template-section-heading">
+                    <span>生成模板</span>
+                  </div>
+                  <div className="all-template-summary">
+                    过程资料、开关站电气设备安装（子单位工程）、集电线路安装工程
+                  </div>
+                </div>
+                <div className="generation-actions">
+                  <button className="generate-button" onClick={generateAllProcess} disabled={!canGenerateAllProcess}>
+                    {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
+                    检测并生成全部模板 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />

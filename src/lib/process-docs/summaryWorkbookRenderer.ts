@@ -158,12 +158,6 @@ function preserveSummaryQualityPrintLayout(xml: string): string {
     nextXml = nextXml.replace(/<sheetPr>/, '<sheetPr><pageSetUpPr fitToPage="1"/>');
   }
 
-  nextXml = upsertSelfClosingElement(
-    nextXml,
-    "pageMargins",
-    '<pageMargins left="0.786805555555556" right="0" top="0.590277777777778" bottom="0" header="0.511805555555556" footer="0.511805555555556"/>',
-    "</worksheet>",
-  );
   nextXml = upsertPageSetup(nextXml);
   return nextXml;
 }
