@@ -198,11 +198,12 @@ function inspectionLotTemplateFilesForTitle(title: string): string[] {
 function matchingHiddenWorkTemplates(title: string, templates: ProcessTemplate[]): ProcessTemplate[] {
   const templateFile = firstMatchingTemplateFile(title, [
     ["模板拆除", "模板拆除隐蔽工程质量验收记录.xlsx"],
-    ["钢筋隐蔽", "钢筋隐蔽工程质量验收记录.xlsx"],
+    ["钢筋", "钢筋隐蔽工程质量验收记录.xlsx"],
     ["电缆线路施工", "低压交流电缆隐蔽工程质量验收记录.xlsx"],
+    ["电缆", "低压交流电缆隐蔽工程质量验收记录.xlsx"],
   ]);
 
-  return templateFile ? findByTemplateFiles(templates, ["隐蔽工程质量报验单.docx", templateFile]) : [];
+  return findByTemplateFiles(templates, templateFile ? ["隐蔽工程质量报验单.docx", templateFile] : ["隐蔽工程质量报验单.docx"]);
 }
 
 function matchingConstructionRecordTemplates(title: string, templates: ProcessTemplate[]): ProcessTemplate[] {
@@ -252,7 +253,7 @@ function isSubitemQualityRecordTitle(title: string): boolean {
 }
 
 function isHiddenWorkQualityTitle(title: string): boolean {
-  return /隐蔽工程(?:报验申请及质量验收记录|质量报验单及隐蔽工程质量验收记录)/.test(title);
+  return title.includes("隐蔽");
 }
 
 function isElectricalSubitemTitle(title: string): boolean {
@@ -312,6 +313,10 @@ const COMMON_PROCESS_TEMPLATE_FILES = new Set([
   "子单位工程报验申请单.docx",
   "分部工程报验申请单.docx",
   "分项工程报验申请单.docx",
+  "隐蔽工程质量报验单.docx",
+  "模板拆除隐蔽工程质量验收记录.xlsx",
+  "钢筋隐蔽工程质量验收记录.xlsx",
+  "低压交流电缆隐蔽工程质量验收记录.xlsx",
 ]);
 
 const SWITCH_STATION_TEMPLATE_FILES = new Set([

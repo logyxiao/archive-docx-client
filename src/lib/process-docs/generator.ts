@@ -9,11 +9,20 @@ import {
   getProcessRecordApplicability,
   isRecordInTemplateModule,
   isSummaryWorkbookTemplate,
+  isTemplateInModule,
   loadProcessManifest,
   loadProcessTemplate,
   matchingTemplatesByTitle,
 } from "./templates";
-import type { GenerateProcessOptions, ProcessGenerationResult, ProcessTemplate, ProcessTemplateModule, ProcessUserFields } from "./types";
+import type {
+  GenerateProcessOptions,
+  GenerateSelectedProcessOptions,
+  ProcessGenerationResult,
+  ProcessTemplate,
+  ProcessTemplateMatch,
+  ProcessTemplateModule,
+  ProcessUserFields,
+} from "./types";
 import { joinPath, sanitizeFileName } from "./utils";
 import { renderProcessWorkbook } from "./workbookRenderer";
 
@@ -75,6 +84,76 @@ export async function generateProcessDocs(
   return { files, skipped, errors };
 }
 
+export async function generateSelectedProcessDocs(
+  records: ArchiveRecord[],
+  options: GenerateSelectedProcessOptions,
+  writeFile: (path: string, bytes: Uint8Array) => Promise<void>,
+): Promise<ProcessGenerationResult> {
+  const files: ProcessGenerationResult["files"] = [];
+  const skipped: string[] = [];
+  const errors: string[] = [];
+  const switchStationContext = switchStationContextRecords(records);
+
+  for (const selection of options.selections) {
+    const record = records.find((item) => item.archiveCode === selection.archiveCode);
+    if (!record) {
+      skipped.push(`${selection.archiveCode}：未找到案卷`);
+      continue;
+    }
+
+    const item = record.items.find((entry) => entry.fileCode === selection.fileCode && entry.sequence === selection.sequence);
+    if (!item) {
+      skipped.push(`${selection.archiveCode} ${selection.sequence} ${selection.fileCode}：未找到文件题名`);
+      continue;
+    }
+
+    const recordOutputDir = joinPath(
+      joinPath(options.outputDir, outputDirForTemplateModule(selection.templateModule)),
+      sanitizeFileName(record.archiveCode + record.fullTitle),
+    );
+    const outputName = processOutputName(selection.template, item);
+    const outputPath = joinPath(recordOutputDir, outputName);
+
+    try {
+      const contextRecords = selection.templateModule === "switch-station" ? switchStationContext : records;
+      const bytes = await renderProcessTemplate(
+        selection.template,
+        record,
+        item,
+        options.userFields ?? {},
+        selection.templateModule,
+        contextRecords,
+      );
+      await writeFile(outputPath, bytes);
+      files.push({ name: outputName, path: outputPath });
+    } catch (error) {
+      errors.push(`${outputName}：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return { files, skipped, errors };
+}
+
+export function allProcessTemplateOptions(templates: ProcessTemplate[]): ProcessTemplateMatch[] {
+  return dedupeTemplateMatches(
+    PROCESS_TEMPLATE_MODULES.flatMap((templateModule) =>
+      templates
+        .filter((template) => isTemplateInModule(template, templateModule))
+        .map((template) => ({ templateModule, template })),
+    ),
+  );
+}
+
+export function matchingAllProcessTemplates(record: ArchiveRecord, item: ArchiveItem, templates: ProcessTemplate[]): ProcessTemplateMatch[] {
+  return dedupeTemplateMatches(
+    PROCESS_TEMPLATE_MODULES.filter((templateModule) => isRecordInTemplateModule(record, templateModule))
+      .flatMap((templateModule) =>
+        expandSwitchStationTemplates(item, matchingTemplatesByTitle(item, templates, templateModule), templateModule)
+          .map((template) => ({ templateModule, template })),
+      ),
+  );
+}
+
 function outputDirForTemplateModule(templateModule: ProcessTemplateModule): string {
   if (templateModule === "switch-station") {
     return SWITCH_STATION_OUTPUT_DIR;
@@ -83,6 +162,28 @@ function outputDirForTemplateModule(templateModule: ProcessTemplateModule): stri
     return COLLECTOR_LINE_OUTPUT_DIR;
   }
   return PROCESS_OUTPUT_DIR;
+}
+
+const PROCESS_TEMPLATE_MODULES: ProcessTemplateModule[] = ["process", "switch-station", "collector-line"];
+
+function dedupeTemplateMatches(matches: ProcessTemplateMatch[]): ProcessTemplateMatch[] {
+  const seen = new Set<string>();
+  const result: ProcessTemplateMatch[] = [];
+
+  for (const match of matches) {
+    const key = [
+      match.template.templateFile,
+      match.template.originalName,
+      match.template.outputFileCodeOverride ?? "",
+    ].join("\u0000");
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(match);
+  }
+
+  return result;
 }
 
 function expandSwitchStationTemplates(

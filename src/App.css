@@ -42,6 +42,29 @@ button:disabled {
   opacity: 0.58;
 }
 
+.app-error-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.app-error-card {
+  display: grid;
+  width: min(520px, 100%);
+  gap: 14px;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  padding: 22px;
+  background: #ffffff;
+  box-shadow: 0 8px 28px rgba(24, 35, 48, 0.07);
+}
+
+.app-error-card p {
+  overflow-wrap: anywhere;
+  color: #697580;
+}
+
 .app-shell {
   display: flex;
   height: 100vh;
@@ -372,7 +395,9 @@ h2 {
 
 .detail-pane {
   align-self: start;
+  height: 100%;
   min-width: 0;
+  overflow: hidden;
 }
 
 .tool-section {
@@ -452,6 +477,10 @@ h2 {
 }
 
 .all-template-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   min-height: 42px;
   border: 1px solid #d8dee5;
   border-radius: 8px;
@@ -459,6 +488,213 @@ h2 {
   color: #2f3f4d;
   background: #fbfcfd;
   font-size: 13px;
+  font-weight: 700;
+}
+
+.template-dir-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 1px solid #d8dee5;
+  border-radius: 7px;
+  padding: 0 10px;
+  color: #25313d;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.template-dir-button:hover {
+  border-color: #156b5f;
+  color: #156b5f;
+  background: #eef7f5;
+}
+
+.all-process-tool {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.all-process-list {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.all-process-record-group {
+  display: grid;
+  gap: 8px;
+}
+
+.all-process-record-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #f7f8fa;
+}
+
+.all-process-record-heading strong {
+  color: #17202a;
+  font-size: 14px;
+}
+
+.all-process-record-heading span {
+  color: #697580;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.all-process-record-files {
+  display: grid;
+  gap: 8px;
+}
+
+.all-process-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 38%);
+  gap: 12px;
+  align-items: start;
+  border: 1px solid #e0e5eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+}
+
+.all-process-row-main {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+
+.all-process-sequence {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 24px;
+  border-radius: 7px;
+  color: #42505d;
+  background: #eef1f4;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.all-process-title {
+  min-width: 0;
+}
+
+.all-process-title strong,
+.all-process-title span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.all-process-title strong {
+  color: #1d2a36;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.all-process-title span {
+  margin-top: 2px;
+  color: #697580;
+  font-size: 12px;
+}
+
+.template-combobox {
+  position: relative;
+  min-width: 0;
+}
+
+.template-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #697580;
+  background: #fbfcfd;
+}
+
+.template-combobox.selected .template-search-field {
+  border-color: #156b5f;
+  color: #156b5f;
+  background: #eef7f5;
+}
+
+.template-combobox.skipped .template-search-field {
+  border-color: #d8dee5;
+  color: #697580;
+  background: #f7f8fa;
+}
+
+.template-search-field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #17202a;
+}
+
+.template-option-list {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  display: grid;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid #ccd5dd;
+  border-radius: 8px;
+  padding: 4px;
+  background: #ffffff;
+  box-shadow: 0 12px 24px rgba(24, 35, 48, 0.14);
+}
+
+.template-option {
+  min-width: 0;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 8px;
+  overflow: hidden;
+  color: #25313d;
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-option:hover,
+.template-option.active {
+  color: #123f39;
+  background: #eef7f5;
+}
+
+.template-option-empty {
+  padding: 8px;
+  color: #697580;
+  font-size: 12px;
   font-weight: 700;
 }
 

@@ -24,6 +24,23 @@ export interface GenerateProcessOptions {
   templateModule?: ProcessTemplateModule;
 }
 
+export interface ProcessTemplateMatch {
+  templateModule: ProcessTemplateModule;
+  template: ProcessTemplate;
+}
+
+export interface ProcessTemplateSelection extends ProcessTemplateMatch {
+  archiveCode: string;
+  fileCode: string;
+  sequence: string;
+}
+
+export interface GenerateSelectedProcessOptions {
+  outputDir: string;
+  userFields?: ProcessUserFields;
+  selections: ProcessTemplateSelection[];
+}
+
 export interface ProcessGenerationResult {
   files: GeneratedFile[];
   skipped: string[];

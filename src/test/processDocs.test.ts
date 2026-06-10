@@ -2,7 +2,15 @@ import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
-import { generateProcessDocs, renderProcessDocx, renderProcessWorkbook, renderSummaryWorkbook } from "../lib/processDocs";
+import {
+  generateProcessDocs,
+  generateSelectedProcessDocs,
+  loadProcessManifest,
+  matchingAllProcessTemplates,
+  renderProcessDocx,
+  renderProcessWorkbook,
+  renderSummaryWorkbook,
+} from "../lib/processDocs";
 import type { ArchiveRecord } from "../lib/types";
 
 const processRecord = createProcessRecord();
@@ -97,6 +105,51 @@ describe("process docs generation", () => {
       expect(paths[0]).toContain("/过程资料/5028G01-0011-8312-001");
     });
 
+    it("resolves all-module matches for preview and generates selected manual templates", async () => {
+      stubProcessFetch();
+      const manifest = await loadProcessManifest();
+      const startReportMatches = matchingAllProcessTemplates(processRecord, processRecord.items[0], manifest.templates);
+      const unmatchedItem = {
+        ...processRecord.items[4],
+        sequence: "99",
+        fileCode: "5028G01-SG-ZHHC-TEST-099",
+        title: "高明分布式项目 需要人工选择模板的文件",
+      };
+      const record = {
+        ...processRecord,
+        items: [unmatchedItem],
+      };
+      const manualTemplate = manifest.templates.find((template) => template.templateFile === "开工报审.docx")!;
+      const paths: string[] = [];
+
+      expect(startReportMatches.map((match) => match.template.templateFile)).toEqual(["开工报审.docx"]);
+      expect(matchingAllProcessTemplates(record, unmatchedItem, manifest.templates)).toEqual([]);
+
+      const result = await generateSelectedProcessDocs(
+        [record],
+        {
+          outputDir: "/tmp/archive-output",
+          selections: [
+            {
+              archiveCode: record.archiveCode,
+              fileCode: unmatchedItem.fileCode,
+              sequence: unmatchedItem.sequence,
+              templateModule: "process",
+              template: manualTemplate,
+            },
+          ],
+        },
+        async (path) => {
+          paths.push(path);
+        },
+      );
+
+      expect(result.files).toHaveLength(1);
+      expect(result.skipped).toEqual([]);
+      expect(result.errors).toEqual([]);
+      expect(fileNames(paths)).toEqual(["99、5028G01-SG-ZHHC-TEST-099高明分布式项目 需要人工选择模板的文件.docx"]);
+    });
+
     it("uses the shared start-report template when the item title contains start report text", async () => {
       stubProcessFetch();
       const startReportRecord: ArchiveRecord = {
@@ -144,6 +197,28 @@ describe("process docs generation", () => {
       expect(xml.match(/<w:pgMar[^>]+>/)?.[0]).toBe(templateXml.match(/<w:pgMar[^>]+>/)?.[0]);
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
+    });
+
+    it("prioritizes files whose titles contain hidden-work text", async () => {
+      stubProcessFetch();
+      const manifest = await loadProcessManifest();
+      const genericHiddenItem = {
+        ...processRecord.items[4],
+        sequence: "50",
+        fileCode: "5028G01-SG-ZHHC-TEST-YB-001",
+        title: "高明分布式项目 设备基础隐蔽检查记录",
+      };
+      const cableHiddenItem = {
+        ...processRecord.items[4],
+        sequence: "51",
+        fileCode: "5028G01-SG-ZHHC-TEST-YB-002",
+        title: "高明分布式项目 电缆隐蔽报验申请及验收记录",
+      };
+
+      expect(matchingAllProcessTemplates(processRecord, genericHiddenItem, manifest.templates).map((match) => match.template.templateFile))
+        .toEqual(["隐蔽工程质量报验单.docx"]);
+      expect(matchingAllProcessTemplates(processRecord, cableHiddenItem, manifest.templates).map((match) => match.template.templateFile))
+        .toEqual(["隐蔽工程质量报验单.docx", "低压交流电缆隐蔽工程质量验收记录.xlsx"]);
     });
 
     it("uses a division start-report title when the source title is a division start report", async () => {

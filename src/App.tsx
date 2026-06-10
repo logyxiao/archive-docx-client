@@ -23,12 +23,19 @@ import { generateArchiveCatalog } from "./lib/catalog";
 import { generateArchiveDocs } from "./lib/docx";
 import { parseArchiveWorkbook } from "./lib/excel";
 import {
+  allProcessTemplateOptions,
   generateProcessDocs,
+  generateSelectedProcessDocs,
+  loadProcessManifest,
+  matchingAllProcessTemplates,
   PROCESS_TEMPLATE_CATEGORIES,
   PROCESS_TEMPLATE_CATEGORY_IDS,
   normalizeProcessTemplateCategories,
+  type ProcessTemplateManifest,
+  type ProcessTemplateMatch,
   type ProcessTemplateCategoryId,
   type ProcessTemplateModule,
+  type ProcessTemplateSelection,
 } from "./lib/processDocs";
 import { openSystemPath, readBinaryFile, writeBinaryFile } from "./lib/tauriFiles";
 import type { ArchiveRecord } from "./lib/types";
@@ -44,6 +51,15 @@ const ALL_PROCESS_DOCS_TAB = "all-process-docs";
 const PROCESS_DOCS_TAB = "process-docs";
 const SWITCH_STATION_TAB = "switch-station-process-docs";
 const COLLECTOR_LINE_TAB = "collector-line-process-docs";
+const NO_PROCESS_TEMPLATE_KEY = "__none__";
+const PROCESS_TEMPLATE_DIR = "/Users/to/Documents/logyxiao/yf/archive-docx-client/public/templates/process-docs";
+
+interface AllProcessTemplateOption {
+  key: string;
+  label: string;
+  searchText: string;
+  match?: ProcessTemplateMatch;
+}
 
 interface SavedProcessFields {
   projectName: string;
@@ -116,6 +132,49 @@ function loadSavedProcessTemplateCategories(storageKey: string): ProcessTemplate
   }
 }
 
+function allProcessRowKey(archiveCode: string, fileCode: string, sequence: string): string {
+  return `${archiveCode}\u0000${fileCode}\u0000${sequence}`;
+}
+
+function processTemplateOptionKey(match: ProcessTemplateMatch): string {
+  return [
+    match.templateModule,
+    match.template.templateFile,
+    match.template.originalName,
+    match.template.outputFileCodeOverride ?? "",
+  ].join("\u0000");
+}
+
+function processTemplateOptionLabel(match: ProcessTemplateMatch): string {
+  const code = match.template.outputFileCodeOverride ? `（${match.template.outputFileCodeOverride}）` : "";
+  return `${match.template.templateFile}${code} · ${processModuleLabel(match.templateModule)}`;
+}
+
+function processTemplateSearchText(match: ProcessTemplateMatch): string {
+  return `${processTemplateOptionLabel(match)} ${match.template.originalName}`.toLowerCase();
+}
+
+function templateMatchFromKey(key: string | undefined, options: AllProcessTemplateOption[]): ProcessTemplateMatch | undefined {
+  return options.find((option) => option.key === key)?.match;
+}
+
+function archiveShortCode(record: ArchiveRecord): string {
+  const parts = record.archiveCode.split("-");
+  const categoryCode = record.categoryCode || parts[parts.length - 2] || "";
+  const sequence = parts[parts.length - 1] || "";
+  return [categoryCode, sequence].filter(Boolean).join("-");
+}
+
+function processModuleLabel(templateModule: ProcessTemplateModule): string {
+  if (templateModule === "switch-station") {
+    return "开关站电气设备安装（子单位工程）";
+  }
+  if (templateModule === "collector-line") {
+    return "集电线路安装工程";
+  }
+  return "过程资料";
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState(ARCHIVE_DOCX_TAB);
   const savedProcessFields = useMemo(loadSavedProcessFields, []);
@@ -179,6 +238,11 @@ function App() {
   const [selectedCollectorLineTemplateCategories, setSelectedCollectorLineTemplateCategories] = useState<ProcessTemplateCategoryId[]>(
     savedCollectorLineTemplateCategories,
   );
+  const [processManifest, setProcessManifest] = useState<ProcessTemplateManifest | null>(null);
+  const [manualAllTemplateValues, setManualAllTemplateValues] = useState<Record<string, string>>({});
+  const [allTemplateSearchTerms, setAllTemplateSearchTerms] = useState<Record<string, string>>({});
+  const [activeAllTemplateRow, setActiveAllTemplateRow] = useState("");
+  const [isLoadingProcessManifest, setIsLoadingProcessManifest] = useState(false);
   const [isProcessInfoModalOpen, setIsProcessInfoModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -203,6 +267,78 @@ function App() {
     );
   }, [query, records, showOnlySelected, selectedCodes]);
 
+  const selectedRecords = useMemo(
+    () => records.filter((record) => selectedCodes.includes(record.archiveCode)),
+    [records, selectedCodes],
+  );
+
+  const allTemplateOptions = useMemo<AllProcessTemplateOption[]>(
+    () => {
+      if (!processManifest) {
+        return [];
+      }
+
+      return [
+        {
+          key: NO_PROCESS_TEMPLATE_KEY,
+          label: "无",
+          searchText: "无 none",
+        },
+        ...allProcessTemplateOptions(processManifest.templates).map((match) => ({
+          key: processTemplateOptionKey(match),
+          label: processTemplateOptionLabel(match),
+          searchText: processTemplateSearchText(match),
+          match,
+        })),
+      ];
+    },
+    [processManifest],
+  );
+
+  const allProcessRows = useMemo(() => {
+    if (!processManifest) {
+      return [];
+    }
+
+    return selectedRecords.flatMap((record) =>
+      [...record.items]
+        .sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0))
+        .map((item) => ({
+          key: allProcessRowKey(record.archiveCode, item.fileCode, item.sequence),
+          record,
+          item,
+          matches: matchingAllProcessTemplates(record, item, processManifest.templates),
+        })),
+    );
+  }, [processManifest, selectedRecords]);
+
+  const allProcessGroups = useMemo(() => {
+    if (!processManifest) {
+      return [];
+    }
+
+    return selectedRecords.map((record) => ({
+      record,
+      rows: [...record.items]
+        .sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0))
+        .map((item) => ({
+          key: allProcessRowKey(record.archiveCode, item.fileCode, item.sequence),
+          record,
+          item,
+          matches: matchingAllProcessTemplates(record, item, processManifest.templates),
+        })),
+    }));
+  }, [processManifest, selectedRecords]);
+
+  const unresolvedAllProcessRows = useMemo(
+    () =>
+      allProcessRows.filter((row) => {
+        const selectedKey = selectedAllTemplateKey(row.key);
+        return !selectedKey || (!templateMatchFromKey(selectedKey, allTemplateOptions) && selectedKey !== NO_PROCESS_TEMPLATE_KEY);
+      }),
+    [allProcessRows, allTemplateOptions, manualAllTemplateValues],
+  );
+
   const shouldGenerateDocx = generateCover || generateNote || generateSpine;
   const canGenerate = selectedCodes.length > 0 && actualOutputDir && (shouldGenerateDocx || generateCatalogWorkbook);
   const canGenerateProcess =
@@ -211,7 +347,13 @@ function App() {
     selectedCodes.length > 0 && Boolean(actualOutputDir) && selectedSwitchStationTemplateCategories.length > 0 && !isGeneratingProcess;
   const canGenerateCollectorLine =
     selectedCodes.length > 0 && Boolean(actualOutputDir) && selectedCollectorLineTemplateCategories.length > 0 && !isGeneratingProcess;
-  const canGenerateAllProcess = selectedCodes.length > 0 && Boolean(actualOutputDir) && !isGeneratingProcess;
+  const canGenerateAllProcess =
+    selectedCodes.length > 0
+    && Boolean(actualOutputDir)
+    && Boolean(processManifest)
+    && allProcessRows.length > 0
+    && unresolvedAllProcessRows.length === 0
+    && !isGeneratingProcess;
   const previewIndex = previewRecord
     ? filteredRecords.findIndex((record) => record.archiveCode === previewRecord.archiveCode)
     : -1;
@@ -256,6 +398,35 @@ function App() {
   useEffect(() => {
     localStorage.setItem(COLLECTOR_LINE_TEMPLATE_CATEGORIES_KEY, JSON.stringify(selectedCollectorLineTemplateCategories));
   }, [selectedCollectorLineTemplateCategories]);
+
+  useEffect(() => {
+    if (activeTab !== ALL_PROCESS_DOCS_TAB || processManifest) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingProcessManifest(true);
+    loadProcessManifest()
+      .then((manifest) => {
+        if (!cancelled) {
+          setProcessManifest(manifest);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          void showOperationError(error);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingProcessManifest(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, processManifest]);
 
   async function chooseExcel() {
     const selected = await open({
@@ -498,44 +669,93 @@ function App() {
     setIsGeneratingProcess(true);
 
     try {
-      const modules: ProcessTemplateModule[] = ["process", "switch-station", "collector-line"];
-      const summaries: string[] = [];
-      let generatedFileCount = 0;
-      const skipped: string[] = [];
-      const errors: string[] = [];
-
-      for (const templateModule of modules) {
-        const result = await generateProcessDocs(
-          records,
-          {
-            selectedCodes,
-            outputDir: actualOutputDir,
-            selectedTemplateCategories: [...PROCESS_TEMPLATE_CATEGORY_IDS],
-            templateModule,
-            userFields: processUserFields(),
-          },
-          writeBinaryFile,
-        );
-
-        generatedFileCount += result.files.length;
-        skipped.push(...result.skipped.map((item) => `${processModuleLabel(templateModule)}：${item}`));
-        errors.push(...result.errors.map((item) => `${processModuleLabel(templateModule)}：${item}`));
-        summaries.push(`${processModuleLabel(templateModule)} ${result.files.length} 个`);
-      }
-
-      const skippedText = skipped.length > 0 ? `\n跳过 ${skipped.length} 条：\n${skipped.slice(0, 12).join("\n")}` : "";
-      const errorText = errors.length > 0 ? `\n失败 ${errors.length} 个：\n${errors.slice(0, 12).join("\n")}` : "";
-      await showDialogMessage(
-        `全部过程资料生成完成：${generatedFileCount} 个文件。\n${summaries.join("；")}${skippedText}${errorText}`,
+      const selections = selectedAllProcessTemplates();
+      const result = await generateSelectedProcessDocs(
+        records,
         {
-          title: errors.length > 0 ? "生成完成" : "生成成功",
-          kind: errors.length > 0 ? "warning" : "info",
+          outputDir: actualOutputDir,
+          selections,
+          userFields: processUserFields(),
+        },
+        writeBinaryFile,
+      );
+      const skippedText = result.skipped.length > 0 ? `\n跳过 ${result.skipped.length} 条：\n${result.skipped.slice(0, 12).join("\n")}` : "";
+      const errorText = result.errors.length > 0 ? `\n失败 ${result.errors.length} 个：\n${result.errors.slice(0, 12).join("\n")}` : "";
+      await showDialogMessage(
+        `全部过程资料生成完成：${result.files.length} 个文件。${skippedText}${errorText}`,
+        {
+          title: result.errors.length > 0 ? "生成完成" : "生成成功",
+          kind: result.errors.length > 0 ? "warning" : "info",
         },
       );
     } catch (error) {
       await showOperationError(error);
     } finally {
       setIsGeneratingProcess(false);
+    }
+  }
+
+  function selectedAllProcessTemplates(): ProcessTemplateSelection[] {
+    return allProcessRows.flatMap((row) => {
+      const selectedKey = selectedAllTemplateKey(row.key);
+      if (selectedKey === NO_PROCESS_TEMPLATE_KEY) {
+        return [];
+      }
+
+      const match = templateMatchFromKey(selectedKey, allTemplateOptions);
+      if (!match) {
+        return [];
+      }
+
+      return [{
+        archiveCode: row.record.archiveCode,
+        fileCode: row.item.fileCode,
+        sequence: row.item.sequence,
+        templateModule: match.templateModule,
+        template: match.template,
+      }];
+    });
+  }
+
+  function selectedAllTemplateKey(rowKey: string): string {
+    if (Object.prototype.hasOwnProperty.call(manualAllTemplateValues, rowKey)) {
+      return manualAllTemplateValues[rowKey] ?? "";
+    }
+
+    return NO_PROCESS_TEMPLATE_KEY;
+  }
+
+  function selectedAllTemplateOption(rowKey: string): AllProcessTemplateOption | undefined {
+    const selectedKey = selectedAllTemplateKey(rowKey);
+    return allTemplateOptions.find((option) => option.key === selectedKey);
+  }
+
+  function filteredAllTemplateOptions(rowKey: string): AllProcessTemplateOption[] {
+    const keyword = (allTemplateSearchTerms[rowKey] ?? "").trim().toLowerCase();
+    if (!keyword) {
+      return allTemplateOptions;
+    }
+
+    return allTemplateOptions.filter((option) => option.searchText.includes(keyword));
+  }
+
+  function selectAllTemplate(rowKey: string, option: AllProcessTemplateOption) {
+    setManualAllTemplateValues((current) => ({
+      ...current,
+      [rowKey]: option.key,
+    }));
+    setAllTemplateSearchTerms((current) => ({
+      ...current,
+      [rowKey]: "",
+    }));
+    setActiveAllTemplateRow("");
+  }
+
+  async function openProcessTemplateDir() {
+    try {
+      await openSystemPath(PROCESS_TEMPLATE_DIR);
+    } catch (error) {
+      await showOperationError(error);
     }
   }
 
@@ -553,16 +773,6 @@ function App() {
       subcontractorContent: processSubcontractorContent.trim(),
       supervisionDepartment: processSupervisionDepartment.trim(),
     };
-  }
-
-  function processModuleLabel(templateModule: ProcessTemplateModule): string {
-    if (templateModule === "switch-station") {
-      return "开关站电气设备安装（子单位工程）";
-    }
-    if (templateModule === "collector-line") {
-      return "集电线路安装工程";
-    }
-    return "过程资料";
   }
 
   const controlBand = (
@@ -802,7 +1012,7 @@ function App() {
             {recordPane}
 
             <section className="detail-pane">
-              <div className="tool-section">
+              <div className="tool-section all-process-tool">
                 <div className="section-heading">
                   <FolderTree size={19} />
                   <h2>全部过程资料</h2>
@@ -815,16 +1025,119 @@ function App() {
                 </div>
                 <div className="process-template-section">
                   <div className="template-section-heading">
-                    <span>生成模板</span>
+                    <span>文件题名与模板匹配</span>
                   </div>
                   <div className="all-template-summary">
-                    过程资料、开关站电气设备安装（子单位工程）、集电线路安装工程
+                    <span>
+                      已选 {selectedCodes.length} 个档号，{allProcessRows.length} 条文件题名
+                      {unresolvedAllProcessRows.length > 0 ? `，${unresolvedAllProcessRows.length} 条需选择模板` : ""}
+                    </span>
+                    <button type="button" className="template-dir-button" onClick={() => void openProcessTemplateDir()}>
+                      <FolderOpen size={15} />
+                      打开模板目录
+                    </button>
                   </div>
+                </div>
+                <div className="all-process-list">
+                  {isLoadingProcessManifest ? (
+                    <div className="empty-state detail-empty">
+                      <Loader2 className="spin" size={18} />
+                      正在加载模板
+                    </div>
+                  ) : selectedCodes.length === 0 ? (
+                    <div className="empty-state detail-empty">请选择档号</div>
+                  ) : allProcessRows.length === 0 ? (
+                    <div className="empty-state detail-empty">未读取到文件题名</div>
+                  ) : (
+                    allProcessGroups.map((group) => (
+                      <section key={group.record.archiveCode} className="all-process-record-group">
+                        <div className="all-process-record-heading">
+                          <strong>{archiveShortCode(group.record)}</strong>
+                          <span>{group.rows.length} 个文件</span>
+                        </div>
+                        <div className="all-process-record-files">
+                          {group.rows.map((row) => {
+                            const selectedOption = selectedAllTemplateOption(row.key);
+                            const isSkipped = selectedOption?.key === NO_PROCESS_TEMPLATE_KEY;
+                            const searchTerm = allTemplateSearchTerms[row.key] ?? "";
+                            const inputValue = activeAllTemplateRow === row.key ? searchTerm : selectedOption?.label ?? "";
+                            const options = activeAllTemplateRow === row.key ? filteredAllTemplateOptions(row.key) : [];
+                            return (
+                              <article key={row.key} className="all-process-row">
+                                <div className="all-process-row-main">
+                                  <div className="all-process-sequence">{row.item.sequence || "-"}</div>
+                                  <div className="all-process-title">
+                                    <strong>{row.item.title || "未命名文件"}</strong>
+                                    <span>{row.item.fileCode || "/"}</span>
+                                  </div>
+                                </div>
+                                <div className={`template-combobox ${selectedOption ? "selected" : ""} ${isSkipped ? "skipped" : ""}`}>
+                                  <label className="template-search-field">
+                                    <Search size={15} />
+                                    <input
+                                      value={inputValue}
+                                      onFocus={() => {
+                                        setActiveAllTemplateRow(row.key);
+                                        setAllTemplateSearchTerms((current) => ({
+                                          ...current,
+                                          [row.key]: selectedOption?.label ?? "",
+                                        }));
+                                      }}
+                                      onChange={(event) => {
+                                        const value = event.currentTarget.value;
+                                        setActiveAllTemplateRow(row.key);
+                                        setAllTemplateSearchTerms((current) => ({
+                                          ...current,
+                                          [row.key]: value,
+                                        }));
+                                      }}
+                                      onBlur={() => {
+                                        window.setTimeout(() => {
+                                          setActiveAllTemplateRow((current) => current === row.key ? "" : current);
+                                          setAllTemplateSearchTerms((current) => {
+                                            const next = { ...current };
+                                            delete next[row.key];
+                                            return next;
+                                          });
+                                        }, 120);
+                                      }}
+                                      placeholder="待选择"
+                                    />
+                                  </label>
+                                  {options.length > 0 ? (
+                                    <div className="template-option-list">
+                                      {options.map((option) => (
+                                        <button
+                                          key={option.key}
+                                          type="button"
+                                          className={`template-option ${option.key === selectedOption?.key ? "active" : ""}`}
+                                          onMouseDown={(event) => {
+                                            event.preventDefault();
+                                            selectAllTemplate(row.key, option);
+                                          }}
+                                        >
+                                          {option.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : activeAllTemplateRow === row.key ? (
+                                    <div className="template-option-list">
+                                      <div className="template-option-empty">无匹配模板</div>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ))
+                  )}
                 </div>
                 <div className="generation-actions">
                   <button className="generate-button" onClick={generateAllProcess} disabled={!canGenerateAllProcess}>
                     {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
-                    检测并生成全部模板 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
+                    生成 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />
