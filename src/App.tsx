@@ -16,6 +16,7 @@ import {
   Search,
   Settings2,
   SlidersHorizontal,
+  Upload,
   X,
 } from "lucide-react";
 import "./App.css";
@@ -37,7 +38,14 @@ import {
   type ProcessTemplateModule,
   type ProcessTemplateSelection,
 } from "./lib/processDocs";
-import { openSystemPath, readBinaryFile, writeBinaryFile } from "./lib/tauriFiles";
+import {
+  importProcessTemplate,
+  openSystemPath,
+  processBuiltinTemplateDir,
+  processTemplateUserDir,
+  readBinaryFile,
+  writeBinaryFile,
+} from "./lib/tauriFiles";
 import type { ArchiveRecord } from "./lib/types";
 
 const DEFAULT_BACKUP_NOTE = "";
@@ -52,7 +60,6 @@ const PROCESS_DOCS_TAB = "process-docs";
 const SWITCH_STATION_TAB = "switch-station-process-docs";
 const COLLECTOR_LINE_TAB = "collector-line-process-docs";
 const NO_PROCESS_TEMPLATE_KEY = "__none__";
-const PROCESS_TEMPLATE_DIR = "/Users/to/Documents/logyxiao/yf/archive-docx-client/public/templates/process-docs";
 
 interface AllProcessTemplateOption {
   key: string;
@@ -141,13 +148,15 @@ function processTemplateOptionKey(match: ProcessTemplateMatch): string {
     match.templateModule,
     match.template.templateFile,
     match.template.originalName,
+    match.template.userTemplatePath ?? "",
     match.template.outputFileCodeOverride ?? "",
   ].join("\u0000");
 }
 
 function processTemplateOptionLabel(match: ProcessTemplateMatch): string {
   const code = match.template.outputFileCodeOverride ? `（${match.template.outputFileCodeOverride}）` : "";
-  return `${match.template.templateFile}${code} · ${processModuleLabel(match.templateModule)}`;
+  const source = match.template.userTemplatePath ? "导入模板" : processModuleLabel(match.templateModule);
+  return `${match.template.templateFile}${code} · ${source}`;
 }
 
 function processTemplateSearchText(match: ProcessTemplateMatch): string {
@@ -243,6 +252,7 @@ function App() {
   const [allTemplateSearchTerms, setAllTemplateSearchTerms] = useState<Record<string, string>>({});
   const [activeAllTemplateRow, setActiveAllTemplateRow] = useState("");
   const [isLoadingProcessManifest, setIsLoadingProcessManifest] = useState(false);
+  const [isImportingProcessTemplate, setIsImportingProcessTemplate] = useState(false);
   const [isProcessInfoModalOpen, setIsProcessInfoModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -333,7 +343,7 @@ function App() {
   const unresolvedAllProcessRows = useMemo(
     () =>
       allProcessRows.filter((row) => {
-        const selectedKey = selectedAllTemplateKey(row.key);
+        const selectedKey = selectedAllTemplateKey(row.key, row.matches);
         return !selectedKey || (!templateMatchFromKey(selectedKey, allTemplateOptions) && selectedKey !== NO_PROCESS_TEMPLATE_KEY);
       }),
     [allProcessRows, allTemplateOptions, manualAllTemplateValues],
@@ -697,7 +707,7 @@ function App() {
 
   function selectedAllProcessTemplates(): ProcessTemplateSelection[] {
     return allProcessRows.flatMap((row) => {
-      const selectedKey = selectedAllTemplateKey(row.key);
+      const selectedKey = selectedAllTemplateKey(row.key, row.matches);
       if (selectedKey === NO_PROCESS_TEMPLATE_KEY) {
         return [];
       }
@@ -717,16 +727,16 @@ function App() {
     });
   }
 
-  function selectedAllTemplateKey(rowKey: string): string {
+  function selectedAllTemplateKey(rowKey: string, matches: ProcessTemplateMatch[] = []): string {
     if (Object.prototype.hasOwnProperty.call(manualAllTemplateValues, rowKey)) {
       return manualAllTemplateValues[rowKey] ?? "";
     }
 
-    return NO_PROCESS_TEMPLATE_KEY;
+    return matches[0] ? processTemplateOptionKey(matches[0]) : NO_PROCESS_TEMPLATE_KEY;
   }
 
-  function selectedAllTemplateOption(rowKey: string): AllProcessTemplateOption | undefined {
-    const selectedKey = selectedAllTemplateKey(rowKey);
+  function selectedAllTemplateOption(rowKey: string, matches: ProcessTemplateMatch[] = []): AllProcessTemplateOption | undefined {
+    const selectedKey = selectedAllTemplateKey(rowKey, matches);
     return allTemplateOptions.find((option) => option.key === selectedKey);
   }
 
@@ -751,9 +761,47 @@ function App() {
     setActiveAllTemplateRow("");
   }
 
-  async function openProcessTemplateDir() {
+  async function importProcessTemplates() {
+    const selected = await open({
+      multiple: true,
+      filters: [{ name: "过程资料模板", extensions: ["docx", "xlsx"] }],
+    });
+    const selectedPaths = Array.isArray(selected) ? selected : typeof selected === "string" ? [selected] : [];
+    if (selectedPaths.length === 0) {
+      return;
+    }
+
+    setIsImportingProcessTemplate(true);
     try {
-      await openSystemPath(PROCESS_TEMPLATE_DIR);
+      for (const sourcePath of selectedPaths) {
+        await importProcessTemplate(sourcePath);
+      }
+      const manifest = await loadProcessManifest();
+      setProcessManifest(manifest);
+      await showDialogMessage(`已导入 ${selectedPaths.length} 个模板。`, {
+        title: "导入完成",
+        kind: "info",
+      });
+    } catch (error) {
+      await showOperationError(error);
+    } finally {
+      setIsImportingProcessTemplate(false);
+    }
+  }
+
+  async function openBuiltInProcessTemplateDir() {
+    try {
+      const templateDir = await processBuiltinTemplateDir();
+      await openSystemPath(templateDir);
+    } catch (error) {
+      await showOperationError(error);
+    }
+  }
+
+  async function openUserProcessTemplateDir() {
+    try {
+      const templateDir = await processTemplateUserDir();
+      await openSystemPath(templateDir);
     } catch (error) {
       await showOperationError(error);
     }
@@ -1032,10 +1080,25 @@ function App() {
                       已选 {selectedCodes.length} 个档号，{allProcessRows.length} 条文件题名
                       {unresolvedAllProcessRows.length > 0 ? `，${unresolvedAllProcessRows.length} 条需选择模板` : ""}
                     </span>
-                    <button type="button" className="template-dir-button" onClick={() => void openProcessTemplateDir()}>
-                      <FolderOpen size={15} />
-                      打开模板目录
-                    </button>
+                    <div className="template-summary-actions">
+                      <button
+                        type="button"
+                        className="template-dir-button"
+                        onClick={() => void importProcessTemplates()}
+                        disabled={isImportingProcessTemplate}
+                      >
+                        {isImportingProcessTemplate ? <Loader2 className="spin" size={15} /> : <Upload size={15} />}
+                        导入模板
+                      </button>
+                      <button type="button" className="template-dir-button" onClick={() => void openBuiltInProcessTemplateDir()}>
+                        <FolderOpen size={15} />
+                        打开内置目录
+                      </button>
+                      <button type="button" className="template-dir-button" onClick={() => void openUserProcessTemplateDir()}>
+                        <FolderOpen size={15} />
+                        打开导入目录
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="all-process-list">
@@ -1057,7 +1120,7 @@ function App() {
                         </div>
                         <div className="all-process-record-files">
                           {group.rows.map((row) => {
-                            const selectedOption = selectedAllTemplateOption(row.key);
+                            const selectedOption = selectedAllTemplateOption(row.key, row.matches);
                             const isSkipped = selectedOption?.key === NO_PROCESS_TEMPLATE_KEY;
                             const searchTerm = allTemplateSearchTerms[row.key] ?? "";
                             const inputValue = activeAllTemplateRow === row.key ? searchTerm : selectedOption?.label ?? "";

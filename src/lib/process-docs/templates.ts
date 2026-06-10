@@ -1,4 +1,5 @@
 import type { ArchiveItem, ArchiveRecord } from "../types";
+import { loadUserProcessTemplates, readBinaryFile } from "../tauriFiles";
 import { PROCESS_RECORD_KEYWORDS, PROCESS_TEMPLATE_ROOT } from "./constants";
 import { collectorLineTemplatesForItem, isCollectorLineRecord, isCollectorLineTemplate } from "./collectorLine";
 import { isSwitchStationArchiveRecord } from "./switchStation";
@@ -10,10 +11,26 @@ export async function loadProcessManifest(): Promise<ProcessTemplateManifest> {
     throw new Error("无法加载过程资料模板清单");
   }
 
-  return response.json();
+  const manifest = await response.json() as ProcessTemplateManifest;
+  let userTemplates: ProcessTemplate[] = [];
+  try {
+    userTemplates = await loadUserProcessTemplates();
+  } catch {
+    userTemplates = [];
+  }
+
+  return {
+    templates: mergeProcessTemplates(manifest.templates, userTemplates),
+  };
 }
 
-export async function loadProcessTemplate(templateFile: string): Promise<ArrayBuffer> {
+export async function loadProcessTemplate(template: ProcessTemplate | string): Promise<ArrayBuffer> {
+  if (typeof template !== "string" && template.userTemplatePath) {
+    const bytes = await readBinaryFile(template.userTemplatePath);
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  }
+
+  const templateFile = typeof template === "string" ? template : template.templateFile;
   const response = await fetch(`${PROCESS_TEMPLATE_ROOT}/${encodeURIComponent(templateFile)}`);
   if (!response.ok) {
     throw new Error(`无法加载过程资料模板：${templateFile}`);
@@ -37,39 +54,106 @@ export function matchingTemplatesByTitle(
 ): ProcessTemplate[] {
   const title = item.title;
   const activeTemplates = templates.filter((template) => isTemplateInModule(template, templateModule));
+  const userTemplates = matchingUserTemplates(title, activeTemplates);
 
   if (isStartReportItemTitle(title)) {
-    return findByTemplateFiles(activeTemplates, ["开工报审.docx"]);
+    return withUserTemplates(findByTemplateFiles(activeTemplates, ["开工报审.docx"]), userTemplates);
   }
 
   if (templateModule === "collector-line") {
-    return findByTemplateFiles(activeTemplates, collectorLineTemplatesForItem(item));
+    return withUserTemplates(findByTemplateFiles(activeTemplates, collectorLineTemplatesForItem(item)), userTemplates);
   }
 
   if (isSubunitQualityItemTitle(title)) {
     const qualityTemplate = title.includes("开关站电气设备安装")
       ? "开关站电气设备安装子单位工程质量验收记录（汇总用）.xlsx"
       : "子单位工程质量验收记录.xlsx";
-    return findByTemplateFiles(activeTemplates, ["子单位工程报验申请单.docx", qualityTemplate]);
+    return withUserTemplates(findByTemplateFiles(activeTemplates, ["子单位工程报验申请单.docx", qualityTemplate]), userTemplates);
   }
 
   if (isHiddenWorkQualityTitle(title)) {
-    return matchingHiddenWorkTemplates(title, activeTemplates);
+    return withUserTemplates(matchingHiddenWorkTemplates(title, activeTemplates), userTemplates);
   }
 
   if (isDivisionQualityApplicationTitle(title)) {
-    return matchingDivisionTemplates(title, activeTemplates);
+    return withUserTemplates(matchingDivisionTemplates(title, activeTemplates), userTemplates);
   }
 
   if (isSubitemQualityApplicationTitle(title) || isSubitemQualityRecordTitle(title)) {
-    return matchingSubitemTemplates(title, activeTemplates);
+    return withUserTemplates(matchingSubitemTemplates(title, activeTemplates), userTemplates);
   }
 
   if (title.includes("检验批质量验收记录")) {
-    return matchingInspectionLotTemplates(title, activeTemplates);
+    return withUserTemplates(matchingInspectionLotTemplates(title, activeTemplates), userTemplates);
   }
 
-  return matchingConstructionRecordTemplates(title, activeTemplates);
+  return withUserTemplates(matchingConstructionRecordTemplates(title, activeTemplates), userTemplates);
+}
+
+function mergeProcessTemplates(builtInTemplates: ProcessTemplate[], userTemplates: ProcessTemplate[]): ProcessTemplate[] {
+  const result = [...builtInTemplates];
+  const seenUserPaths = new Set<string>();
+  for (const template of userTemplates) {
+    if (!template.userTemplatePath || seenUserPaths.has(template.userTemplatePath)) {
+      continue;
+    }
+    seenUserPaths.add(template.userTemplatePath);
+    result.push(template);
+  }
+  return result;
+}
+
+function withUserTemplates(baseTemplates: ProcessTemplate[], userTemplates: ProcessTemplate[]): ProcessTemplate[] {
+  if (userTemplates.length === 0) {
+    return baseTemplates;
+  }
+
+  const result = [...baseTemplates];
+  const seen = new Set(result.map(templateIdentity));
+  for (const template of userTemplates) {
+    const identity = templateIdentity(template);
+    if (seen.has(identity)) {
+      continue;
+    }
+    seen.add(identity);
+    result.push(template);
+  }
+  return result;
+}
+
+function matchingUserTemplates(title: string, templates: ProcessTemplate[]): ProcessTemplate[] {
+  const normalizedTitle = normalizeTemplateMatchText(title);
+  if (!normalizedTitle) {
+    return [];
+  }
+
+  return templates.filter((template) => {
+    if (!template.userTemplatePath) {
+      return false;
+    }
+    return [template.templateFile, template.originalName].some((name) => {
+      const normalizedTemplateName = normalizeTemplateMatchText(fileNameWithoutExtension(name));
+      return normalizedTemplateName.length >= 2
+        && (normalizedTitle.includes(normalizedTemplateName) || normalizedTemplateName.includes(normalizedTitle));
+    });
+  });
+}
+
+function fileNameWithoutExtension(value: string): string {
+  return value.replace(/\.[^.]+$/, "");
+}
+
+function normalizeTemplateMatchText(value: string): string {
+  return value
+    .replace(/\{\{[^}]+}}/g, "")
+    .replace(/^[0-9]+[-_、.\s]*/, "")
+    .replace(/（.*?）|\(.*?\)/g, "")
+    .replace(/[^\p{Script=Han}A-Za-z0-9]/gu, "")
+    .toLowerCase();
+}
+
+function templateIdentity(template: ProcessTemplate): string {
+  return template.userTemplatePath ?? `${template.templateFile}\u0000${template.originalName}\u0000${template.outputFileCodeOverride ?? ""}`;
 }
 
 function matchingDivisionTemplates(title: string, templates: ProcessTemplate[]): ProcessTemplate[] {

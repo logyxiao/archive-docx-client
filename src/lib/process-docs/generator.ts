@@ -174,6 +174,7 @@ function dedupeTemplateMatches(matches: ProcessTemplateMatch[]): ProcessTemplate
     const key = [
       match.template.templateFile,
       match.template.originalName,
+      match.template.userTemplatePath ?? "",
       match.template.outputFileCodeOverride ?? "",
     ].join("\u0000");
     if (seen.has(key)) {
@@ -223,7 +224,7 @@ async function renderProcessTemplate(
   templateModule: ProcessTemplateModule = "process",
   contextRecords: ArchiveRecord[] = [record],
 ): Promise<Uint8Array> {
-  const bytes = await loadProcessTemplate(template.templateFile);
+  const bytes = await loadProcessTemplate(template);
   const renderItem = template.outputFileCodeOverride ? { ...item, fileCode: template.outputFileCodeOverride } : item;
   if (template.kind === "docx") {
     return renderProcessDocx(bytes, record, renderItem, userFields, templateModule);

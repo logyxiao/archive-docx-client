@@ -491,6 +491,13 @@ h2 {
   font-weight: 700;
 }
 
+.template-summary-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
 .template-dir-button {
   display: inline-flex;
   flex: 0 0 auto;
@@ -505,6 +512,11 @@ h2 {
   background: #ffffff;
   font-size: 12px;
   font-weight: 700;
+}
+
+.template-dir-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .template-dir-button:hover {
