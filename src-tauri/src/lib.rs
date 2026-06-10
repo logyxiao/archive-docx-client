@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::Manager;
@@ -26,12 +27,53 @@ fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
 }
 
 #[tauri::command]
+fn read_binary_file_base64(path: String) -> Result<String, String> {
+    let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
+    Ok(general_purpose::STANDARD.encode(bytes))
+}
+
+#[tauri::command]
 fn write_binary_file(path: String, bytes: Vec<u8>) -> Result<(), String> {
     if let Some(parent) = std::path::Path::new(&path).parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
 
     std::fs::write(path, bytes).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn write_binary_file_base64(
+    path: String,
+    content_base64: String,
+    expected_len: usize,
+) -> Result<(), String> {
+    let bytes = general_purpose::STANDARD
+        .decode(content_base64)
+        .map_err(|error| format!("文件内容编码无效：{error}"))?;
+    if bytes.len() != expected_len {
+        return Err(format!(
+            "文件写入前大小校验失败：期望 {} 字节，实际 {} 字节",
+            expected_len,
+            bytes.len()
+        ));
+    }
+
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+
+    std::fs::write(&path, &bytes).map_err(|error| error.to_string())?;
+    let written_len = std::fs::metadata(&path)
+        .map_err(|error| error.to_string())?
+        .len() as usize;
+    if written_len != expected_len {
+        return Err(format!(
+            "文件写入后大小校验失败：期望 {} 字节，实际 {} 字节",
+            expected_len, written_len
+        ));
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -51,10 +93,16 @@ fn process_template_user_dir(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn process_builtin_template_dir() -> Result<String, String> {
-    find_builtin_template_dir()
-        .map(path_to_string)
-        .ok_or_else(|| "未找到内置模板目录".to_string())
+fn process_builtin_template_dir(app: tauri::AppHandle) -> Result<String, String> {
+    let source = find_builtin_template_dir(&app).ok_or_else(|| "未找到内置模板目录".to_string())?;
+    let mirror = app
+        .path()
+        .app_data_dir()
+        .map(|dir| dir.join("builtin-process-templates"))
+        .map_err(|error| error.to_string())?;
+
+    sync_directory(&source, &mirror)?;
+    Ok(path_to_string(mirror))
 }
 
 #[tauri::command]
@@ -228,21 +276,65 @@ fn path_to_string(path: PathBuf) -> String {
     path.to_string_lossy().to_string()
 }
 
-fn find_builtin_template_dir() -> Option<PathBuf> {
-    let candidates = [
-        std::env::current_dir()
-            .ok()?
-            .join("public/templates/process-docs"),
-        std::env::current_dir()
-            .ok()?
-            .parent()?
-            .join("public/templates/process-docs"),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()?
-            .join("public/templates/process-docs"),
-    ];
+fn sync_directory(source: &Path, target: &Path) -> Result<(), String> {
+    if target.exists() {
+        std::fs::remove_dir_all(target).map_err(|error| error.to_string())?;
+    }
+    std::fs::create_dir_all(target).map_err(|error| error.to_string())?;
+    copy_directory_contents(source, target)
+}
 
-    candidates.into_iter().find(|path| path.exists())
+fn copy_directory_contents(source: &Path, target: &Path) -> Result<(), String> {
+    for entry in std::fs::read_dir(source).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let source_path = entry.path();
+        let file_name = entry.file_name();
+        if is_ignored_template_entry(&file_name) {
+            continue;
+        }
+
+        let target_path = target.join(file_name);
+        if source_path.is_dir() {
+            std::fs::create_dir_all(&target_path).map_err(|error| error.to_string())?;
+            copy_directory_contents(&source_path, &target_path)?;
+        } else if source_path.is_file() {
+            std::fs::copy(&source_path, &target_path).map_err(|error| error.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+fn is_ignored_template_entry(file_name: &std::ffi::OsStr) -> bool {
+    let name = file_name.to_string_lossy();
+    name.starts_with('.') || name.starts_with("~$")
+}
+
+fn find_builtin_template_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+    let resource_dir = app.path().resource_dir().ok();
+    let current_dir = std::env::current_dir().ok();
+    let manifest_parent = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()?
+        .to_path_buf();
+    let mut candidates = Vec::new();
+
+    if let Some(resource_dir) = resource_dir {
+        candidates.push(resource_dir.join("builtin-process-templates"));
+        candidates.push(resource_dir.join("public/templates/process-docs"));
+        candidates.push(resource_dir.join("templates/process-docs"));
+    }
+    if let Some(current_dir) = current_dir {
+        candidates.push(current_dir.join("public/templates/process-docs"));
+        if let Some(parent) = current_dir.parent() {
+            candidates.push(parent.join("public/templates/process-docs"));
+        }
+    }
+    candidates.push(manifest_parent.join("public/templates/process-docs"));
+    candidates.push(manifest_parent.join("dist/templates/process-docs"));
+
+    candidates
+        .into_iter()
+        .find(|path| path.exists() && path.join("manifest.json").exists())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -255,7 +347,9 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             read_binary_file,
+            read_binary_file_base64,
             write_binary_file,
+            write_binary_file_base64,
             open_system_path,
             process_template_user_dir,
             process_builtin_template_dir,

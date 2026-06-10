@@ -34,8 +34,8 @@ export function collectorLineTemplatesForItem(item: ArchiveItem): string[] {
   if (title.includes("直埋电缆隐蔽前检查签证")) {
     return ["直埋电缆隐蔽前检查签证.xlsx"];
   }
-  if (title.includes("电力电缆终端制作安装分项工程质量")) {
-    return ["高压电缆终端制作安装分项工程报验申请单.docx", "电力电缆终端制作安装分项工程质量验收表.xlsx"];
+  if (title.includes("电力电缆终端制作安装分项工程质量") || title.includes("电缆终端制作分项工程质量")) {
+    return ["电力电缆终端制作安装分项工程质量验收表.xlsx", "高压电缆终端制作安装分项工程报验申请单.docx"];
   }
   if (title.includes("电力电缆中间接头制作安装分项工程质量")) {
     return ["电力电缆中间接头制作安装分项工程报验申请单.docx", "电力电缆中间接头制作安装分项工程质量验收表.xlsx"];

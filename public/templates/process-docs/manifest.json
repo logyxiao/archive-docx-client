@@ -595,6 +595,90 @@
       "originalName": "24、表5.0.4  高明分布式项目 电缆中间接头位置记录.xlsx",
       "templateFile": "电缆中间接头位置记录.xlsx",
       "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 1,
+      "kind": "xlsx",
+      "originalName": "1、5028G01-SG-ZHHC-02-001高明分布式项目 并网点光伏变电系统子单位工程质量验收记录（汇总用）.xlsx",
+      "templateFile": "并网点光伏变电系统子单位工程质量验收记录（汇总用）.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 3,
+      "kind": "xlsx",
+      "originalName": "3、5028G01-SG-ZHHC-02-01-001子方阵电气安装分部工程质量验收记录（汇总用）.xlsx",
+      "templateFile": "子方阵电气安装分部工程质量验收记录（汇总用）.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 4,
+      "kind": "xlsx",
+      "originalName": "4、5028G01-SG-ZHHC-02-01-01-001逆变器安装分项工程质量验收表.xlsx",
+      "templateFile": "逆变器安装分项工程质量验收表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 5,
+      "kind": "xlsx",
+      "originalName": "5、逆变器施工安装记录.xlsx",
+      "templateFile": "逆变器施工安装记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 6,
+      "kind": "xlsx",
+      "originalName": "6、逆变器手动分合闸检查记录.xlsx",
+      "templateFile": "逆变器手动分合闸检查记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 7,
+      "kind": "xlsx",
+      "originalName": "7、逆变器通讯调试记录.xlsx",
+      "templateFile": "逆变器通讯调试记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 8,
+      "kind": "xlsx",
+      "originalName": "8、逆变器外观、主要元器件、控制电源、直交流侧接线及极性（相序）、绝缘、接地检查记录.xlsx",
+      "templateFile": "逆变器外观、主要元器件、控制电源、直交流侧接线及极性（相序）、绝缘、接地检查记录.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 9,
+      "kind": "xlsx",
+      "originalName": "9、5028G01-SG-ZHHC-02-01-02-001干式变压器安装分项工程质量验收表#1升压变.xlsx",
+      "templateFile": "干式变压器安装分项工程质量验收表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 16,
+      "kind": "xlsx",
+      "originalName": "16、5028G01-SG-ZHHC-02-02-001子方阵电气线路安装分部工程质量验收记录（汇总用）.xlsx",
+      "templateFile": "子方阵电气线路安装分部工程质量验收记录（汇总用）.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 17,
+      "kind": "xlsx",
+      "originalName": "17、5028G01-SG-ZHHC-02-02-01-001电缆桥架安装分项质量检查验收评定表（桥架制安）.xlsx",
+      "templateFile": "电缆桥架安装分项质量检查验收评定表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 19,
+      "kind": "xlsx",
+      "originalName": "19、5028G01-SG-ZHHC-02-02-03-001#1光伏升压变电缆防火阻燃施工分项工程质量验收表（防火阻燃）.xlsx",
+      "templateFile": "光伏升压变电缆防火阻燃施工分项工程质量验收表.xlsx",
+      "outputExtension": ".xlsx"
+    },
+    {
+      "sequence": 21,
+      "kind": "xlsx",
+      "originalName": "21、5028G01-SG-ZHHC-02-02-03-003开关柜G01柜电缆防火阻燃施工分项工程质量验收表（防火阻燃）.xlsx",
+      "templateFile": "开关柜电缆防火阻燃施工分项工程质量验收表.xlsx",
+      "outputExtension": ".xlsx"
     }
   ]
 }

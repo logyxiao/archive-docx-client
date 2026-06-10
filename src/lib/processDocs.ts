@@ -1,5 +1,6 @@
 export {
   allProcessTemplateOptions,
+  countProcessGenerationFiles,
   generateProcessDocs,
   generateSelectedProcessDocs,
   matchingAllProcessTemplates,

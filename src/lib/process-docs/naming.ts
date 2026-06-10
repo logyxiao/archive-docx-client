@@ -21,7 +21,7 @@ function outputTitle(template: ProcessTemplate, title: string): string {
     return collectorLineTitle;
   }
   const acceptanceStem = cleanTitle
-    .replace(/\s*质量(?:报验申请|报审表)及验收记录\s*$/, "")
+    .replace(/\s*质量(?:报验申请|报审表)(?:及验收记录)?\s*$/, "")
     .replace(/[，,。；;：:\s]+$/g, "")
     .trim();
   const hiddenWorkStem = cleanTitle

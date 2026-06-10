@@ -44,7 +44,7 @@ export function isStartReportItemTitle(title: string): boolean {
 }
 
 export function isSubunitQualityItemTitle(title: string): boolean {
-  return /子单位(?:工程)?/.test(title) && /质量(?:报验申请|报审表)及验收记录/.test(title);
+  return /子单位(?:工程)?/.test(title) && /质量(?:报验申请|报审表)(?:及验收记录)?/.test(title);
 }
 
 export function matchingTemplatesByTitle(
@@ -65,10 +65,16 @@ export function matchingTemplatesByTitle(
   }
 
   if (isSubunitQualityItemTitle(title)) {
-    const qualityTemplate = title.includes("开关站电气设备安装")
+    const qualityTemplate = title.includes("并网点光伏变电系统")
+      ? "并网点光伏变电系统子单位工程质量验收记录（汇总用）.xlsx"
+      : title.includes("开关站电气设备安装")
       ? "开关站电气设备安装子单位工程质量验收记录（汇总用）.xlsx"
       : "子单位工程质量验收记录.xlsx";
-    return withUserTemplates(findByTemplateFiles(activeTemplates, ["子单位工程报验申请单.docx", qualityTemplate]), userTemplates);
+    const templateFiles = ["子单位工程报验申请单.docx"];
+    if (title.includes("及验收记录")) {
+      templateFiles.push(qualityTemplate);
+    }
+    return withUserTemplates(findByTemplateFiles(activeTemplates, templateFiles), userTemplates);
   }
 
   if (isHiddenWorkQualityTitle(title)) {
@@ -157,6 +163,12 @@ function templateIdentity(template: ProcessTemplate): string {
 }
 
 function matchingDivisionTemplates(title: string, templates: ProcessTemplate[]): ProcessTemplate[] {
+  if (title.includes("子方阵电气线路安装")) {
+    return findByTemplateFiles(templates, ["分部工程报验申请单.docx", "子方阵电气线路安装分部工程质量验收记录（汇总用）.xlsx"]);
+  }
+  if (title.includes("子方阵场电气安装") || title.includes("子方阵电气安装")) {
+    return findByTemplateFiles(templates, ["分部工程报验申请单.docx", "子方阵电气安装分部工程质量验收记录（汇总用）.xlsx"]);
+  }
   if (title.includes("子方阵")) {
     return findByTemplateFiles(templates, ["分部工程报验申请单.docx", "子方阵支架及组件安装分部工程质量验收记录（汇总用）.xlsx"]);
   }
@@ -182,7 +194,27 @@ function matchingDivisionTemplates(title: string, templates: ProcessTemplate[]):
 }
 
 function matchingSubitemTemplates(title: string, templates: ProcessTemplate[]): ProcessTemplate[] {
-  const templateFiles = isSubitemQualityApplicationTitle(title) ? ["分项工程报验申请单.docx"] : [];
+  const applicationTemplateFiles = isSubitemQualityApplicationTitle(title) ? ["分项工程报验申请单.docx"] : [];
+  const processTemplate = firstMatchingTemplateFile(title, [
+    ["逆变器安装", "逆变器安装分项工程质量验收表.xlsx"],
+    ["干式变压器安装", "干式变压器安装分项工程质量验收表.xlsx"],
+    ["屋外接地装置安装", "屋外接地装置安装分项工程质量验收表.xlsx"],
+    ["屋内接地装置安装", "屋内接地装置安装分项工程质量验收表.xlsx"],
+    ["电缆桥架安装", "电缆桥架安装分项质量检查验收评定表.xlsx"],
+    ["电缆敷设分项工程质量", "电缆敷设分项工程质量检查验收评定表.xlsx"],
+    ["电缆终端制作", "电力电缆终端制作安装分项工程质量验收表.xlsx"],
+    ["电缆防火与阻燃", "光伏升压变电缆防火阻燃施工分项工程质量验收表.xlsx"],
+    ["电气二次系统", "二次回路检查及控制电缆接线分项工程质量检查验收评定表.xlsx"],
+    ["光伏升压变电缆防火阻燃施工", "光伏升压变电缆防火阻燃施工分项工程质量验收表.xlsx"],
+    ["开关柜G01柜电缆防火阻燃施工", "开关柜电缆防火阻燃施工分项工程质量验收表.xlsx"],
+    ["开关柜G03柜电缆防火阻燃施工", "开关柜电缆防火阻燃施工分项工程质量验收表.xlsx"],
+    ["开关柜G08柜电缆防火阻燃施工", "开关柜电缆防火阻燃施工分项工程质量验收表.xlsx"],
+    ["开关柜G09柜电缆防火阻燃施工", "开关柜电缆防火阻燃施工分项工程质量验收表.xlsx"],
+  ]);
+  if (processTemplate) {
+    return findByTemplateFiles(templates, [processTemplate, ...applicationTemplateFiles]);
+  }
+
   const switchStationTemplate = firstMatchingTemplateFile(title, [
     ["定位及高程控制", "定位及高程控制分项工程质量验收记录.xlsx"],
     ["土方", "土方分项工程质量验收记录.xlsx"],
@@ -211,33 +243,26 @@ function matchingSubitemTemplates(title: string, templates: ProcessTemplate[]): 
     ["通讯系统一次设备安装", "通信系统一次设备安装分项工程质量检查验收评定表.xlsx"],
   ]);
   if (switchStationTemplate) {
-    templateFiles.push(switchStationTemplate);
-    return findByTemplateFiles(templates, templateFiles);
+    return findByTemplateFiles(templates, [switchStationTemplate, ...applicationTemplateFiles]);
   }
 
   if (title.includes("支架安装")) {
-    templateFiles.push(`${buildingTemplatePrefix(title)}支架安装分项工程质量验收表.xlsx`);
-    return findByTemplateFiles(templates, templateFiles);
+    return findByTemplateFiles(templates, [`${buildingTemplatePrefix(title)}支架安装分项工程质量验收表.xlsx`, ...applicationTemplateFiles]);
   }
   if (title.includes("光伏组件安装")) {
-    templateFiles.push(`${buildingTemplatePrefix(title)}光伏组件安装分项工程质量验收表.xlsx`);
-    return findByTemplateFiles(templates, templateFiles);
+    return findByTemplateFiles(templates, [`${buildingTemplatePrefix(title)}光伏组件安装分项工程质量验收表.xlsx`, ...applicationTemplateFiles]);
   }
   if (title.includes("建筑电气")) {
-    templateFiles.push("建筑电气工程分项工程质量验收记录.xlsx");
-    return findByTemplateFiles(templates, templateFiles);
+    return findByTemplateFiles(templates, ["建筑电气工程分项工程质量验收记录.xlsx", ...applicationTemplateFiles]);
   }
   if (isElectricalSubitemTitle(title)) {
-    templateFiles.push("建筑电气工程分项工程质量验收记录.xlsx", ...inspectionLotTemplateFilesForTitle(title));
-    return findByTemplateFiles(templates, templateFiles);
+    return findByTemplateFiles(templates, ["建筑电气工程分项工程质量验收记录.xlsx", ...inspectionLotTemplateFilesForTitle(title), ...applicationTemplateFiles]);
   }
   if (title.includes("紧固件连接")) {
-    templateFiles.push("紧固件连接分项工程质量验收记录.xlsx");
-    return findByTemplateFiles(templates, templateFiles);
+    return findByTemplateFiles(templates, ["紧固件连接分项工程质量验收记录.xlsx", ...applicationTemplateFiles]);
   }
   if (title.includes("组装")) {
-    templateFiles.push("墙架檩条支撑系统组装分项工程质量验收记录.xlsx");
-    return findByTemplateFiles(templates, templateFiles);
+    return findByTemplateFiles(templates, ["墙架檩条支撑系统组装分项工程质量验收记录.xlsx", ...applicationTemplateFiles]);
   }
   return [];
 }
@@ -291,6 +316,18 @@ function matchingHiddenWorkTemplates(title: string, templates: ProcessTemplate[]
 }
 
 function matchingConstructionRecordTemplates(title: string, templates: ProcessTemplate[]): ProcessTemplate[] {
+  if (title.includes("逆变器施工安装记录")) {
+    return findByTemplateFiles(templates, ["逆变器施工安装记录.xlsx"]);
+  }
+  if (title.includes("逆变器手动分合闸检查记录")) {
+    return findByTemplateFiles(templates, ["逆变器手动分合闸检查记录.xlsx"]);
+  }
+  if (title.includes("逆变器通讯调试记录")) {
+    return findByTemplateFiles(templates, ["逆变器通讯调试记录.xlsx"]);
+  }
+  if (title.includes("逆变器外观") && title.includes("检查记录")) {
+    return findByTemplateFiles(templates, ["逆变器外观、主要元器件、控制电源、直交流侧接线及极性（相序）、绝缘、接地检查记录.xlsx"]);
+  }
   if (title.includes("光伏组件支架防腐记录")) {
     return findByTemplateFiles(templates, ["光伏组件支架防腐记录.xlsx"]);
   }
@@ -345,8 +382,7 @@ function isElectricalSubitemTitle(title: string): boolean {
 }
 
 function findByTemplateFiles(templates: ProcessTemplate[], templateFiles: string[]): ProcessTemplate[] {
-  const wanted = new Set(templateFiles);
-  return templates.filter((template) => wanted.has(template.templateFile));
+  return templateFiles.flatMap((templateFile) => templates.filter((template) => template.templateFile === templateFile));
 }
 
 function buildingTemplatePrefix(title: string): string {
@@ -364,7 +400,7 @@ export function isTemplateInModule(template: ProcessTemplate, templateModule: Pr
   if (templateModule === "collector-line") {
     return COMMON_PROCESS_TEMPLATE_FILES.has(template.templateFile) || isCollectorLineTemplate(template);
   }
-  return !isSwitchStationTemplate(template) && !isCollectorLineTemplate(template);
+  return !isSwitchStationTemplate(template) && !isCollectorLineOnlyTemplate(template);
 }
 
 export function isRecordInTemplateModule(record: ArchiveRecord, templateModule: ProcessTemplateModule): boolean {
@@ -392,6 +428,13 @@ function isSwitchStationTemplate(template: ProcessTemplate): boolean {
   return SWITCH_STATION_TEMPLATE_FILES.has(template.templateFile);
 }
 
+function isCollectorLineOnlyTemplate(template: ProcessTemplate): boolean {
+  if (COMMON_PROCESS_TEMPLATE_FILES.has(template.templateFile)) {
+    return false;
+  }
+  return isCollectorLineTemplate(template);
+}
+
 const COMMON_PROCESS_TEMPLATE_FILES = new Set([
   "开工报审.docx",
   "子单位工程报验申请单.docx",
@@ -401,6 +444,11 @@ const COMMON_PROCESS_TEMPLATE_FILES = new Set([
   "模板拆除隐蔽工程质量验收记录.xlsx",
   "钢筋隐蔽工程质量验收记录.xlsx",
   "低压交流电缆隐蔽工程质量验收记录.xlsx",
+  "屋外接地装置安装分项工程质量验收表.xlsx",
+  "屋内接地装置安装分项工程质量验收表.xlsx",
+  "电缆敷设分项工程质量检查验收评定表.xlsx",
+  "电力电缆终端制作安装分项工程质量验收表.xlsx",
+  "二次回路检查及控制电缆接线分项工程质量检查验收评定表.xlsx",
 ]);
 
 const SWITCH_STATION_TEMPLATE_FILES = new Set([

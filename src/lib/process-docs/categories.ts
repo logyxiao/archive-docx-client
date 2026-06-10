@@ -93,7 +93,7 @@ export function getProcessTemplateCategory(template: ProcessTemplate): ProcessTe
     return "subitem-quality-acceptance";
   }
 
-  if (/施工记录|测量记录|检查记录|防腐记录|短路电流|开路电压|签证|位置记录/.test(name)) {
+  if (/施工记录|施工安装记录|安装记录|调试记录|测量记录|检查记录|防腐记录|短路电流|开路电压|签证|位置记录/.test(name)) {
     return "construction-record";
   }
 

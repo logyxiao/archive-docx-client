@@ -3,6 +3,7 @@ import JSZip from "jszip";
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import {
+  countProcessGenerationFiles,
   generateProcessDocs,
   generateSelectedProcessDocs,
   loadProcessManifest,
@@ -48,6 +49,17 @@ async function workbookFrom(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
 async function xlsxXml(bytes: Uint8Array, path: string): Promise<string> {
   const zip = await JSZip.loadAsync(bytes);
   return zip.file(path)!.async("string");
+}
+
+async function expectValidOfficeFile(path: string, bytes: Uint8Array) {
+  const zip = await JSZip.loadAsync(bytes);
+  if (path.endsWith(".docx")) {
+    expect(zip.file("word/document.xml")).toBeTruthy();
+    return;
+  }
+  if (path.endsWith(".xlsx")) {
+    expect(zip.file("xl/workbook.xml")).toBeTruthy();
+  }
 }
 
 function cellText(cell: ExcelJS.Cell): string {
@@ -376,6 +388,7 @@ describe("process docs generation", () => {
 
     it("uses the shared subunit inspection application template when selected", async () => {
       stubProcessFetch();
+      const projectName = "中核汇能遂溪国恒坤达3.84MW屋顶分布式光伏项目";
       const subunitRecord: ArchiveRecord = {
         ...processRecord,
         items: [
@@ -398,7 +411,7 @@ describe("process docs generation", () => {
           outputDir: "/tmp/archive-output",
           selectedTemplateCategories: ["subunit-inspection-application"],
           userFields: {
-            projectName: "测试工程名称",
+            projectName,
             supervisionDepartment: "测试监理项目部",
             constructionProjectManager: "测试项目经理",
           },
@@ -409,11 +422,19 @@ describe("process docs generation", () => {
         },
       );
       const xml = await docxXml(written[0]);
+      const templateXml = await docxXml(readPublic("/templates/process-docs/子单位工程报验申请单.docx"));
+      const projectCodeParagraph = Array.from(xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g))
+        .map((match) => match[0])
+        .find((paragraph) => paragraph.includes("工程名称：") && paragraph.includes("编号："));
 
       expect(result.files).toHaveLength(1);
       expect(fileNames(paths)[0]).toBe("2、5028G01-SG-ZHHC-02-001并网点光伏变电系统子单位工程报验申请单.docx");
-      expect(xml).toContain("工程名称：测试工程名称");
+      expect(xml).toContain(`工程名称：${projectName}`);
       expect(xml).toContain("编号：5028G01-SG-ZHHC-02-001");
+      expect(xml.match(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/)?.[0]).toBe(templateXml.match(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/)?.[0]);
+      expect(projectCodeParagraph).toMatch(/<w:spacing\b(?=[^>]*w:before="0")(?=[^>]*w:after="0")(?=[^>]*w:line="240")/);
+      expect(projectCodeParagraph).toContain('<w:sz w:val="16"/>');
+      expect(projectCodeParagraph).toContain('<w:szCs w:val="16"/>');
       expect(xml).toContain("测试监理项目部");
       expect(xml).toContain("工程现已施工完毕");
       expect(xml).toContain("<w:t>子单位工程</w:t>");
@@ -426,33 +447,25 @@ describe("process docs generation", () => {
       expect(result.errors).toEqual([]);
     });
 
-    it("generates explicitly supported 8312-002 electrical process templates", async () => {
+    it("uses the subunit inspection application template for standalone subunit quality review titles", async () => {
       stubProcessFetch();
-      const record8312002: ArchiveRecord = {
+      const subunitRecord: ArchiveRecord = {
         ...processRecord,
-        archiveCode: "5028G01-0011-8312-002",
-        fullTitle: "中核汇能高明创楷3.58904MWp屋顶分布式光伏项目 光伏变电系统子单位工程质量报审，分部、分项及检验批质量验收记录文件",
         items: [
           {
-            ...processRecord.items[2],
-            sequence: "3",
-            fileCode: "5028G01-SG-ZHHC-02-01-001",
-            title: "高明分布式项目 子方阵场电气安装分部工程质量报验申请及验收记录",
-          },
-          {
-            ...processRecord.items[19],
-            sequence: "20",
-            fileCode: "5028G01-SG-ZHHC-02-02-03-002",
-            title: "高明分布式项目 #2光伏升压变电缆防火阻燃施工分项工程质量报验申请及验收记录",
+            ...processRecord.items[1],
+            sequence: "2",
+            fileCode: "5028G01-SG-ZHHC-02-001",
+            title: "高明分布式项目 并网点光伏变电系统子单位工程质量报审表",
           },
         ],
       };
       const paths: string[] = [];
 
       const result = await generateProcessDocs(
-        [record8312002],
+        [subunitRecord],
         {
-          selectedCodes: [record8312002.archiveCode],
+          selectedCodes: [subunitRecord.archiveCode],
           outputDir: "/tmp/archive-output",
         },
         async (path) => {
@@ -460,13 +473,111 @@ describe("process docs generation", () => {
         },
       );
 
-      expect(result.files).toHaveLength(4);
-      expect(fileNames(paths)).toEqual([
-        "3、5028G01-SG-ZHHC-02-01-001子方阵场电气安装分部工程报验申请单.docx",
+      expect(result.files).toHaveLength(1);
+      expect(fileNames(paths)).toEqual(["2、5028G01-SG-ZHHC-02-001并网点光伏变电系统子单位工程报验申请单.docx"]);
+      expect(result.skipped).toEqual([]);
+      expect(result.errors).toEqual([]);
+    });
+
+    it("matches and generates the full 8312-002 electrical process template set", async () => {
+      stubProcessFetch();
+      const record8312002 = createGridConnectedElectricalRecord();
+      const manifest = await loadProcessManifest();
+      const defaultMatches = record8312002.items.flatMap((item) =>
+        matchingAllProcessTemplates(record8312002, item, manifest.templates),
+      );
+      const defaultTemplateFiles = defaultMatches.map((match) => match.template.templateFile);
+      const written: Array<{ path: string; bytes: Uint8Array }> = [];
+
+      expect(defaultMatches).toHaveLength(42);
+      expect(countProcessGenerationFiles(
+        [record8312002],
+        [record8312002.archiveCode],
+        manifest.templates,
+      )).toBe(42);
+      expect(defaultTemplateFiles).not.toContain("建筑电气工程分项工程质量验收记录.xlsx");
+      expect(defaultTemplateFiles).toEqual(expect.arrayContaining([
+        "并网点光伏变电系统子单位工程质量验收记录（汇总用）.xlsx",
+        "子方阵电气安装分部工程质量验收记录（汇总用）.xlsx",
+        "逆变器安装分项工程质量验收表.xlsx",
+        "逆变器施工安装记录.xlsx",
+        "逆变器手动分合闸检查记录.xlsx",
+        "逆变器通讯调试记录.xlsx",
+        "逆变器外观、主要元器件、控制电源、直交流侧接线及极性（相序）、绝缘、接地检查记录.xlsx",
+        "干式变压器安装分项工程质量验收表.xlsx",
+        "屋外接地装置安装分项工程质量验收表.xlsx",
+        "屋内接地装置安装分项工程质量验收表.xlsx",
+        "子方阵电气线路安装分部工程质量验收记录（汇总用）.xlsx",
+        "电缆桥架安装分项质量检查验收评定表.xlsx",
+        "电缆敷设分项工程质量检查验收评定表.xlsx",
+        "光伏升压变电缆防火阻燃施工分项工程质量验收表.xlsx",
+        "开关柜电缆防火阻燃施工分项工程质量验收表.xlsx",
+      ]));
+
+      const result = await generateProcessDocs(
+        [record8312002],
+        {
+          selectedCodes: [record8312002.archiveCode],
+          outputDir: "/tmp/archive-output",
+        },
+        async (path, bytes) => {
+          written.push({ path, bytes });
+        },
+      );
+
+      expect(result.files).toHaveLength(42);
+      expect(written).toHaveLength(42);
+      expect(fileNames(written.map((item) => item.path))).toEqual(expect.arrayContaining([
         "3、5028G01-SG-ZHHC-02-01-001子方阵场电气安装分部工程质量验收记录（汇总用）.xlsx",
-        "20、5028G01-SG-ZHHC-02-02-03-002#2光伏升压变电缆防火阻燃施工分项工程报验申请单.docx",
-        "20、5028G01-SG-ZHHC-02-02-03-002#2光伏升压变电缆防火阻燃施工分项工程质量验收记录.xlsx",
-      ]);
+        "4、5028G01-SG-ZHHC-02-01-01-001逆变器安装分项工程质量验收表.xlsx",
+        "8、高明分布式项目 逆变器外观、主要元器件、控制电源、直交流侧接线及极性（相序）、绝缘、接地检查记录）.xlsx",
+        "17、5028G01-SG-ZHHC-02-02-01-001电缆桥架安装分项工程质量检查验收评定表.xlsx",
+        "24、5028G01-SG-ZHHC-02-02-03-006开关柜G09柜电缆防火阻燃施工分项工程质量验收表.xlsx",
+      ]));
+      for (const file of written) {
+        await expectValidOfficeFile(file.path, file.bytes);
+      }
+      expect(result.skipped).toEqual([]);
+      expect(result.errors).toEqual([]);
+    });
+
+    it("matches Suixi short electrical titles to reusable quality workbook templates", async () => {
+      stubProcessFetch();
+      const suixiRecord = createSuixiGridConnectedElectricalRecord();
+      const manifest = await loadProcessManifest();
+      const templateFilesForSequence = (sequence: string) => {
+        const item = suixiRecord.items.find((entry) => entry.sequence === sequence)!;
+        return matchingAllProcessTemplates(suixiRecord, item, manifest.templates).map((match) => match.template.templateFile);
+      };
+      const written: Array<{ path: string; bytes: Uint8Array }> = [];
+
+      expect(templateFilesForSequence("14")[0]).toBe("电力电缆终端制作安装分项工程质量验收表.xlsx");
+      expect(templateFilesForSequence("14")).toContain("电力电缆终端制作安装分项工程质量验收表.xlsx");
+      expect(templateFilesForSequence("14")).not.toContain("建筑电气工程分项工程质量验收记录.xlsx");
+      expect(templateFilesForSequence("15")[0]).toBe("光伏升压变电缆防火阻燃施工分项工程质量验收表.xlsx");
+      expect(templateFilesForSequence("16")[0]).toBe("二次回路检查及控制电缆接线分项工程质量检查验收评定表.xlsx");
+
+      const result = await generateProcessDocs(
+        [suixiRecord],
+        {
+          selectedCodes: [suixiRecord.archiveCode],
+          outputDir: "/tmp/archive-output",
+          selectedTemplateCategories: ["subitem-quality-acceptance"],
+        },
+        async (path, bytes) => {
+          written.push({ path, bytes });
+        },
+      );
+
+      expect(result.files).toHaveLength(3);
+      expect(fileNames(written.map((item) => item.path))).toEqual(expect.arrayContaining([
+        "14、5028G02-SG-ZHHC-03-02-03-001电缆终端制作分项工程质量验收表.xlsx",
+        "15、5028G02-SG-ZHHC-03-02-04-001电缆防火与阻燃分项工程质量验收表.xlsx",
+        "16、5028G02-SG-ZHHC-03-02-05-001电气二次系统分项工程质量检查验收评定表.xlsx",
+      ]));
+      for (const file of written) {
+        await expectValidOfficeFile(file.path, file.bytes);
+      }
       expect(result.skipped).toEqual([]);
       expect(result.errors).toEqual([]);
     });
@@ -1076,6 +1187,97 @@ function createProcessRecord(): ArchiveRecord {
     drawingPages: 0,
     textPages: 94,
     items,
+  };
+}
+
+function createGridConnectedElectricalRecord(): ArchiveRecord {
+  const item = (sequence: number, fileCode: string, title: string, fileDate = "20250420") => ({
+    sequence: String(sequence),
+    fileCode,
+    owner: "中核华辰建筑工程有限公司",
+    title,
+    fileDate,
+    pageNo: String(sequence),
+    note: "",
+  });
+
+  return {
+    categoryCode: "8312",
+    archiveCode: "5028G01-0011-8312-002",
+    fullTitle: "中核汇能高明创楷3.58904MWp屋顶分布式光伏项目 光伏变电系统子单位工程质量报审，分部、分项及检验批质量验收记录文件",
+    projectName: "中核汇能高明创楷3.58904MWp屋顶分布式光伏项目",
+    volumeTitle: "光伏变电系统子单位工程质量报审，分部、分项及检验批质量验收记录文件",
+    owner: "中核华辰建筑工程有限公司",
+    filingUnit: "中核华辰建筑工程有限公司",
+    retentionPeriod: "30年",
+    startDate: "20250310",
+    endDate: "20250429",
+    dateRange: "20250310-20250429",
+    totalPages: 80,
+    drawingPages: 0,
+    textPages: 80,
+    items: [
+      item(1, "5028G01-SG-ZHHC-02-001", "高明分布式项目 并网点光伏变电系统子单位工程质量报审表及验收记录", "20250429"),
+      item(2, "5028G01-SG-ZHHC-KG-05", "高明分布式项目 子方阵场电气安装分部工程开工报审", "20250330"),
+      item(3, "5028G01-SG-ZHHC-02-01-001", "高明分布式项目 子方阵场电气安装分部工程质量报验申请及验收记录", "20250428"),
+      item(4, "5028G01-SG-ZHHC-02-01-01-001", "高明分布式项目 逆变器安装分项工程质量报验申请及验收记录", "20250428"),
+      item(5, "/", "高明分布式项目 逆变器施工安装记录", "20250416"),
+      item(6, "/", "高明分布式项目 逆变器手动分合闸检查记录", "20250416"),
+      item(7, "/", "高明分布式项目 逆变器通讯调试记录", "20250427"),
+      item(8, "/", "高明分布式项目 逆变器外观、主要元器件、控制电源、直交流侧接线及极性（相序）、绝缘、接地检查记录）", "20250427"),
+      item(9, "5028G01-SG-ZHHC-02-01-02-001", "高明分布式项目 #1干式变压器安装分项工程质量报验申请及验收记录", "20250427"),
+      item(10, "5028G01-SG-ZHHC-02-01-02-002", "高明分布式项目 #2干式变压器安装分项工程质量报验申请及验收记录", "20250427"),
+      item(11, "5028G01-SG-ZHHC-02-01-03-001", "高明分布式项目 #1升压变屋外接地装置安装分项工程质量报验申请及验收记录", "20250425"),
+      item(12, "5028G01-SG-ZHHC-02-01-03-002", "高明分布式项目 #2升压变屋外接地装置安装分项工程质量报验申请及验收记录", "20250425"),
+      item(13, "5028G01-SG-ZHHC-02-01-04-001", "高明分布式项目 #1升压变屋内接地装置安装分项工程质量报验申请及验收记录", "20250425"),
+      item(14, "5028G01-SG-ZHHC-02-01-04-002", "高明分布式项目 #2升压变屋内接地装置安装分项工程质量报验申请及验收记录", "20250425"),
+      item(15, "5028G01-SG-ZHHC-KG-06", "高明分布式项目 子方阵电气线路安装分部工程开工报审", "20250310"),
+      item(16, "5028G01-SG-ZHHC-02-02-001", "高明分布式项目 子方阵电气线路安装分部工程质量报验申请及验收记录", "20250425"),
+      item(17, "5028G01-SG-ZHHC-02-02-01-001", "高明分布式项目 电缆桥架安装分项工程质量报验申请及验收记录", "20250420"),
+      item(18, "5028G01-SG-ZHHC-02-02-02-001", "高明分布式项目 电缆敷设分项工程质量报验申请及验收记录", "20250423"),
+      item(19, "5028G01-SG-ZHHC-02-02-03-001", "高明分布式项目 #1光伏升压变电缆防火阻燃施工分项工程质量报验申请及验收记录", "20250420"),
+      item(20, "5028G01-SG-ZHHC-02-02-03-002", "高明分布式项目 #2光伏升压变电缆防火阻燃施工分项工程质量报验申请及验收记录", "20250420"),
+      item(21, "5028G01-SG-ZHHC-02-02-03-003", "高明分布式项目 开关柜G01柜电缆防火阻燃施工分项工程质量报验申请及验收记录", "20250423"),
+      item(22, "5028G01-SG-ZHHC-02-02-03-004", "高明分布式项目 开关柜G03柜电缆防火阻燃施工分项工程质量报验申请及验收记录", "20250423"),
+      item(23, "5028G01-SG-ZHHC-02-02-03-005", "高明分布式项目 开关柜G08柜电缆防火阻燃施工分项工程质量报验申请及验收记录", "20250423"),
+      item(24, "5028G01-SG-ZHHC-02-02-03-006", "高明分布式项目 开关柜G09柜电缆防火阻燃施工分项工程质量报验申请及验收记录", "20250423"),
+    ],
+  };
+}
+
+function createSuixiGridConnectedElectricalRecord(): ArchiveRecord {
+  const item = (sequence: number, fileCode: string, title: string, fileDate = "20250417") => ({
+    sequence: String(sequence),
+    fileCode,
+    owner: "中核华辰建筑工程有限公司",
+    title,
+    fileDate,
+    pageNo: String(sequence),
+    note: "",
+  });
+
+  return {
+    categoryCode: "8312",
+    archiveCode: "5028G02-0011-8312-004",
+    fullTitle: "中核汇能遂溪国恒坤达3.84MW屋顶分布式光伏项目 并网点光伏变电系统子单位工程开工报审、子方阵场电气安装分部、子方阵电气线路安装分部、计算机监控系统设备安装分部、集电线路安装分部工程、分项及检验批质量验收记录文件",
+    projectName: "中核汇能遂溪国恒坤达3.84MW屋顶分布式光伏项目",
+    volumeTitle: "并网点光伏变电系统子单位工程开工报审、子方阵场电气安装分部、子方阵电气线路安装分部、计算机监控系统设备安装分部、集电线路安装分部工程、分项及检验批质量验收记录文件",
+    owner: "中核华辰建筑工程有限公司",
+    filingUnit: "中核华辰建筑工程有限公司",
+    retentionPeriod: "永久",
+    startDate: "20250417",
+    endDate: "20250430",
+    dateRange: "20250417-20250430",
+    totalPages: 80,
+    drawingPages: 0,
+    textPages: 80,
+    items: [
+      item(14, "5028G02-SG-ZHHC-03-02-03-001", "遂溪分布式项目 电缆终端制作分项工程质量报验申请及验收记录"),
+      item(15, "5028G02-SG-ZHHC-03-02-04-001", "遂溪分布式项目 电缆防火与阻燃分项工程质量报验申请及验收记录"),
+      item(16, "5028G02-SG-ZHHC-03-02-05-001", "遂溪分布式项目 电气二次系统分项工程质量报验申请及验收记录"),
+      item(17, "5028G02-SG-ZHHC-03-02-05-01-001", "遂溪分布式项目 国恒部分直流配电柜检验批质量验收记录", "20250430"),
+      item(18, "5028G02-SG-ZHHC-03-02-05-02-001", "遂溪分布式项目 坤达部分直流配电柜检验批质量验收记录", "20250430"),
+    ],
   };
 }
 

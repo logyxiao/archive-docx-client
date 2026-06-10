@@ -257,11 +257,10 @@ function preserveProcessWorkbookPrintLayout(
     zip.file(path, sheetXml);
   }
 
-  // Restore original styles.xml from template to preserve default font (宋体 10pt)
-  // ExcelJS replaces this with Calibri 11pt which makes all columns appear much wider
   const templateStylesFile = templateZip.file("xl/styles.xml");
-  if (templateStylesFile) {
-    zip.file("xl/styles.xml", templateStylesFile.asText());
+  const generatedStylesFile = zip.file("xl/styles.xml");
+  if (templateStylesFile && generatedStylesFile) {
+    zip.file("xl/styles.xml", restoreTemplateDefaultFont(generatedStylesFile.asText(), templateStylesFile.asText()));
   }
 
   preserveProcessWorkbookPrintArea(zip, templateZip);
@@ -310,6 +309,19 @@ function restoreTemplateSheetFormatting(generatedXml: string, templateXml: strin
   }
 
   return result;
+}
+
+function restoreTemplateDefaultFont(generatedStylesXml: string, templateStylesXml: string): string {
+  const templateDefaultFont = firstFontXml(templateStylesXml);
+  if (!templateDefaultFont) {
+    return generatedStylesXml;
+  }
+
+  return generatedStylesXml.replace(/(<fonts\b[^>]*>)([\s\S]*?<\/font>)/, `$1${templateDefaultFont}`);
+}
+
+function firstFontXml(stylesXml: string): string | undefined {
+  return stylesXml.match(/<fonts\b[^>]*>\s*(<font>[\s\S]*?<\/font>)/)?.[1];
 }
 
 function upsertFitToPage(xml: string): string {

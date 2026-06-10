@@ -1,5 +1,5 @@
 import type { ArchiveItem, ArchiveRecord } from "../types";
-import { isProcessTemplateCategorySelected, normalizeProcessTemplateCategories } from "./categories";
+import { isProcessTemplateCategorySelected, normalizeProcessTemplateCategories, type ProcessTemplateCategoryId } from "./categories";
 import { COLLECTOR_LINE_OUTPUT_DIR, PROCESS_OUTPUT_DIR, SWITCH_STATION_OUTPUT_DIR } from "./constants";
 import { renderProcessDocx } from "./docxRenderer";
 import { processOutputName } from "./naming";
@@ -132,6 +132,32 @@ export async function generateSelectedProcessDocs(
   }
 
   return { files, skipped, errors };
+}
+
+export function countProcessGenerationFiles(
+  records: ArchiveRecord[],
+  selectedCodes: string[],
+  templates: ProcessTemplate[],
+  selectedTemplateCategories?: readonly ProcessTemplateCategoryId[],
+  templateModule: ProcessTemplateModule = "process",
+): number {
+  const selectedCategories = normalizeProcessTemplateCategories(selectedTemplateCategories);
+  const selected = records.filter((record) =>
+    selectedCodes.includes(record.archiveCode) && isRecordInTemplateModule(record, templateModule),
+  );
+
+  return selected.reduce((total, record) => {
+    const applicability = getProcessRecordApplicability(record);
+    if (!applicability.isApplicable) {
+      return total;
+    }
+
+    return total + record.items.reduce((itemTotal, item) => {
+      const templatesForItem = matchingTemplatesByTitle(item, templates, templateModule)
+        .filter((template) => isProcessTemplateCategorySelected(template, selectedCategories));
+      return itemTotal + expandSwitchStationTemplates(item, templatesForItem, templateModule).length;
+    }, 0);
+  }, 0);
 }
 
 export function allProcessTemplateOptions(templates: ProcessTemplate[]): ProcessTemplateMatch[] {

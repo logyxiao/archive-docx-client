@@ -25,6 +25,7 @@ import { generateArchiveDocs } from "./lib/docx";
 import { parseArchiveWorkbook } from "./lib/excel";
 import {
   allProcessTemplateOptions,
+  countProcessGenerationFiles,
   generateProcessDocs,
   generateSelectedProcessDocs,
   loadProcessManifest,
@@ -349,6 +350,58 @@ function App() {
     [allProcessRows, allTemplateOptions, manualAllTemplateValues],
   );
 
+  const archiveGenerationFileCount = useMemo(() => {
+    const recordCount = selectedRecords.length;
+    if (recordCount === 0) {
+      return 0;
+    }
+
+    let count = 0;
+    if (generateCover) {
+      count += recordCount;
+    }
+    if (generateNote) {
+      count += recordCount;
+    }
+    if (generateSpine) {
+      count += Math.ceil(recordCount / 7);
+    }
+    if (generateCatalogWorkbook) {
+      count += 1;
+    }
+    return count;
+  }, [generateCatalogWorkbook, generateCover, generateNote, generateSpine, selectedRecords]);
+
+  const processGenerationFileCount = useMemo(
+    () => processManifest
+      ? countProcessGenerationFiles(records, selectedCodes, processManifest.templates, selectedProcessTemplateCategories, "process")
+      : 0,
+    [processManifest, records, selectedCodes, selectedProcessTemplateCategories],
+  );
+
+  const switchStationGenerationFileCount = useMemo(
+    () => processManifest
+      ? countProcessGenerationFiles(records, selectedCodes, processManifest.templates, selectedSwitchStationTemplateCategories, "switch-station")
+      : 0,
+    [processManifest, records, selectedCodes, selectedSwitchStationTemplateCategories],
+  );
+
+  const collectorLineGenerationFileCount = useMemo(
+    () => processManifest
+      ? countProcessGenerationFiles(records, selectedCodes, processManifest.templates, selectedCollectorLineTemplateCategories, "collector-line")
+      : 0,
+    [processManifest, records, selectedCodes, selectedCollectorLineTemplateCategories],
+  );
+
+  const allProcessGenerationFileCount = useMemo(
+    () =>
+      allProcessRows.reduce((count, row) => {
+        const selectedKey = selectedAllTemplateKey(row.key, row.matches);
+        return templateMatchFromKey(selectedKey, allTemplateOptions) ? count + 1 : count;
+      }, 0),
+    [allProcessRows, allTemplateOptions, manualAllTemplateValues],
+  );
+
   const shouldGenerateDocx = generateCover || generateNote || generateSpine;
   const canGenerate = selectedCodes.length > 0 && actualOutputDir && (shouldGenerateDocx || generateCatalogWorkbook);
   const canGenerateProcess =
@@ -410,7 +463,13 @@ function App() {
   }, [selectedCollectorLineTemplateCategories]);
 
   useEffect(() => {
-    if (activeTab !== ALL_PROCESS_DOCS_TAB || processManifest) {
+    const needsProcessManifest = [
+      ALL_PROCESS_DOCS_TAB,
+      PROCESS_DOCS_TAB,
+      SWITCH_STATION_TAB,
+      COLLECTOR_LINE_TAB,
+    ].includes(activeTab);
+    if (!needsProcessManifest || processManifest) {
       return;
     }
 
@@ -979,7 +1038,7 @@ function App() {
                 <div className="generation-actions">
                   <button className="generate-button" onClick={generate} disabled={!canGenerate || isGenerating}>
                     {isGenerating ? <Loader2 className="spin" size={18} /> : <FileText size={18} />}
-                    生成文件 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
+                    生成文件 {selectedCodes.length > 0 ? `(${archiveGenerationFileCount}个文件)` : ""}
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />
@@ -1039,7 +1098,7 @@ function App() {
                 <div className="generation-actions">
                   <button className="generate-button" onClick={() => generateProcess("process")} disabled={!canGenerateProcess}>
                     {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
-                    生成过程资料 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
+                    生成过程资料 {selectedCodes.length > 0 && processManifest ? `(${processGenerationFileCount}个文件)` : ""}
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />
@@ -1200,7 +1259,7 @@ function App() {
                 <div className="generation-actions">
                   <button className="generate-button" onClick={generateAllProcess} disabled={!canGenerateAllProcess}>
                     {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
-                    生成 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
+                    生成 {selectedCodes.length > 0 && processManifest ? `(${allProcessGenerationFileCount}个文件)` : ""}
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />
@@ -1260,7 +1319,7 @@ function App() {
                 <div className="generation-actions">
                   <button className="generate-button" onClick={() => generateProcess("switch-station")} disabled={!canGenerateSwitchStation}>
                     {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
-                    生成开关站资料 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
+                    生成开关站资料 {selectedCodes.length > 0 && processManifest ? `(${switchStationGenerationFileCount}个文件)` : ""}
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />
@@ -1320,7 +1379,7 @@ function App() {
                 <div className="generation-actions">
                   <button className="generate-button" onClick={() => generateProcess("collector-line")} disabled={!canGenerateCollectorLine}>
                     {isGeneratingProcess ? <Loader2 className="spin" size={18} /> : <FolderTree size={18} />}
-                    生成集电线路资料 {selectedCodes.length > 0 ? `(${selectedCodes.length}条)` : ""}
+                    生成集电线路资料 {selectedCodes.length > 0 && processManifest ? `(${collectorLineGenerationFileCount}个文件)` : ""}
                   </button>
                   <button className="secondary-button open-output-button" onClick={openOutputDir} disabled={!outputDir}>
                     <FolderOpen size={18} />

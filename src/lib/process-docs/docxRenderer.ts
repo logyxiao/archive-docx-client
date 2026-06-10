@@ -265,7 +265,7 @@ function ensurePreserveSpace(attrs: string): string {
 }
 
 function compactDocxPageLayout(xml: string): string {
-  return compactFormNoteParagraphs(xml);
+  return compactProjectCodeParagraphs(compactFormNoteParagraphs(xml));
 }
 
 function compactFormNoteParagraphs(xml: string): string {
@@ -276,6 +276,47 @@ function compactFormNoteParagraphs(xml: string): string {
 
     return compactParagraphSpacing(paragraph);
   });
+}
+
+function compactProjectCodeParagraphs(xml: string): string {
+  return xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
+    const text = paragraphText(paragraph);
+    if (!text.includes("工程名称：") || !text.includes("编号：") || text.length < 42) {
+      return paragraph;
+    }
+
+    return setParagraphFontSize(compactParagraphSpacing(paragraph), compactProjectCodeFontSize(text));
+  });
+}
+
+function compactProjectCodeFontSize(text: string): string {
+  if (text.length >= 52) {
+    return "16";
+  }
+  if (text.length >= 48) {
+    return "18";
+  }
+  return "19";
+}
+
+function setParagraphFontSize(paragraph: string, halfPoints: string): string {
+  return paragraph.replace(/<w:rPr\b([^>]*)>([\s\S]*?)<\/w:rPr>/g, (_match, attrs: string, body: string) => {
+    const withAsciiSize = setEmptyXmlElementAttributes(body, "w:sz", { val: halfPoints });
+    const withComplexSize = setEmptyXmlElementAttributes(withAsciiSize, "w:szCs", { val: halfPoints });
+    return `<w:rPr${attrs}>${withComplexSize}</w:rPr>`;
+  });
+}
+
+function setEmptyXmlElementAttributes(body: string, elementName: string, values: Record<string, string>): string {
+  const pattern = new RegExp(`<${elementName}\\b([^>]*)\\/>`);
+  if (pattern.test(body)) {
+    return body.replace(pattern, (_match, attrs: string) => `<${elementName}${setXmlAttributes(attrs, values)}/>`);
+  }
+
+  const attrs = Object.entries(values)
+    .map(([name, value]) => ` w:${name}="${value}"`)
+    .join("");
+  return `<${elementName}${attrs}/>${body}`;
 }
 
 function compactParagraphSpacing(paragraph: string): string {
