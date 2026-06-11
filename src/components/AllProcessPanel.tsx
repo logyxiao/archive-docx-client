@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { FolderOpen, FolderTree, Loader2, Search, Settings2, SlidersHorizontal } from "lucide-react";
+import { FolderOpen, FolderTree, Loader2, Search, Settings2, SlidersHorizontal, X } from "lucide-react";
 import { NO_PROCESS_TEMPLATE_KEY } from "../app/appConstants";
 import { archiveShortCode, type AllProcessTemplateOption } from "../app/templateOptions";
 import type { ProcessTemplateMatch } from "../lib/processDocs";
@@ -29,18 +29,19 @@ interface AllProcessPanelProps {
   isGenerating: boolean;
   hasOutputDir: boolean;
   allTemplateSearchTerms: Record<string, string>;
-  activeAllTemplateRow: string;
+  activeAllTemplateSlot: string;
   onOpenInfo: () => void;
   onOpenTemplateManager: () => void;
   onOpenBuiltInDir: () => void;
   onOpenUserDir: () => void;
   onGenerate: () => void;
   onOpenOutputDir: () => void;
-  setActiveAllTemplateRow: Dispatch<SetStateAction<string>>;
+  setActiveAllTemplateSlot: Dispatch<SetStateAction<string>>;
   setAllTemplateSearchTerms: Dispatch<SetStateAction<Record<string, string>>>;
-  selectedAllTemplateOption: (rowKey: string, matches?: ProcessTemplateMatch[]) => AllProcessTemplateOption | undefined;
+  selectedAllTemplateOptions: (rowKey: string, matches?: ProcessTemplateMatch[]) => AllProcessTemplateOption[];
   filteredAllTemplateOptions: (rowKey: string) => AllProcessTemplateOption[];
-  selectAllTemplate: (rowKey: string, option: AllProcessTemplateOption) => void;
+  selectAllTemplate: (rowKey: string, option: AllProcessTemplateOption, matches?: ProcessTemplateMatch[]) => void;
+  removeAllTemplate: (rowKey: string, optionKey: string, matches?: ProcessTemplateMatch[]) => void;
 }
 
 export function AllProcessPanel({
@@ -55,18 +56,19 @@ export function AllProcessPanel({
   isGenerating,
   hasOutputDir,
   allTemplateSearchTerms,
-  activeAllTemplateRow,
+  activeAllTemplateSlot,
   onOpenInfo,
   onOpenTemplateManager,
   onOpenBuiltInDir,
   onOpenUserDir,
   onGenerate,
   onOpenOutputDir,
-  setActiveAllTemplateRow,
+  setActiveAllTemplateSlot,
   setAllTemplateSearchTerms,
-  selectedAllTemplateOption,
+  selectedAllTemplateOptions,
   filteredAllTemplateOptions,
   selectAllTemplate,
+  removeAllTemplate,
 }: AllProcessPanelProps) {
   return (
     <div className="detail-pane">
@@ -116,12 +118,13 @@ export function AllProcessPanel({
                 </div>
                 <div className="all-process-record-files">
                   {group.rows.map((row) => {
-                    const selectedOption = selectedAllTemplateOption(row.key, row.matches);
-                    const isSkipped = selectedOption?.key === NO_PROCESS_TEMPLATE_KEY;
-                    const isUnmatched = row.matches.length === 0 && !selectedOption?.match;
+                    const selectedOptions = selectedAllTemplateOptions(row.key, row.matches);
+                    const selectedTemplateOptions = selectedOptions.filter((option) => option.key !== NO_PROCESS_TEMPLATE_KEY);
+                    const isSkipped = selectedOptions.every((option) => option.key === NO_PROCESS_TEMPLATE_KEY);
+                    const isUnmatched = row.matches.length === 0 && !selectedOptions.some((option) => option.match);
                     const searchTerm = allTemplateSearchTerms[row.key] ?? "";
-                    const inputValue = activeAllTemplateRow === row.key ? searchTerm : selectedOption?.label ?? "";
-                    const options = activeAllTemplateRow === row.key ? filteredAllTemplateOptions(row.key) : [];
+                    const isActive = activeAllTemplateSlot === row.key;
+                    const options = isActive ? filteredAllTemplateOptions(row.key) : [];
                     return (
                       <article key={row.key} className={`all-process-row ${isUnmatched ? "unmatched" : ""}`}>
                         <div className="all-process-row-main">
@@ -134,60 +137,78 @@ export function AllProcessPanel({
                             </span>
                           </div>
                         </div>
-                        <div className={`template-combobox ${selectedOption ? "selected" : ""} ${isSkipped ? "skipped" : ""}`}>
-                          <label className="template-search-field">
-                            <Search size={15} />
-                            <input
-                              value={inputValue}
-                              onFocus={() => {
-                                setActiveAllTemplateRow(row.key);
-                                setAllTemplateSearchTerms((current) => ({
-                                  ...current,
-                                  [row.key]: selectedOption?.label ?? "",
-                                }));
-                              }}
-                              onChange={(event) => {
-                                const value = event.currentTarget.value;
-                                setActiveAllTemplateRow(row.key);
-                                setAllTemplateSearchTerms((current) => ({
-                                  ...current,
-                                  [row.key]: value,
-                                }));
-                              }}
-                              onBlur={() => {
-                                window.setTimeout(() => {
-                                  setActiveAllTemplateRow((current) => current === row.key ? "" : current);
-                                  setAllTemplateSearchTerms((current) => {
-                                    const next = { ...current };
-                                    delete next[row.key];
-                                    return next;
-                                  });
-                                }, 120);
-                              }}
-                              placeholder="待选择"
-                            />
-                          </label>
-                          {options.length > 0 ? (
-                            <div className="template-option-list">
-                              {options.map((option) => (
-                                <button
-                                  key={option.key}
-                                  type="button"
-                                  className={`template-option ${option.key === selectedOption?.key ? "active" : ""}`}
-                                  onMouseDown={(event) => {
-                                    event.preventDefault();
-                                    selectAllTemplate(row.key, option);
-                                  }}
-                                >
-                                  {option.label}
-                                </button>
+                        <div className={`template-tag-selector ${isSkipped ? "skipped" : ""}`}>
+                          {selectedTemplateOptions.length > 0 ? (
+                            <div className="template-tag-list">
+                              {selectedTemplateOptions.map((selectedOption) => (
+                                <span key={selectedOption.key} className="template-tag">
+                                  <span>{selectedOption.label}</span>
+                                  <button
+                                    type="button"
+                                    aria-label="删除模板"
+                                    onClick={() => removeAllTemplate(row.key, selectedOption.key, row.matches)}
+                                  >
+                                    <X size={13} />
+                                  </button>
+                                </span>
                               ))}
                             </div>
-                          ) : activeAllTemplateRow === row.key ? (
-                            <div className="template-option-list">
-                              <div className="template-option-empty">无匹配模板</div>
-                            </div>
                           ) : null}
+                          <div className={`template-combobox ${selectedTemplateOptions.length > 0 ? "selected" : ""} ${isSkipped ? "skipped" : ""}`}>
+                            <label className="template-search-field">
+                              <Search size={15} />
+                              <input
+                                value={isActive ? searchTerm : ""}
+                                onFocus={() => {
+                                  setActiveAllTemplateSlot(row.key);
+                                  setAllTemplateSearchTerms((current) => ({
+                                    ...current,
+                                    [row.key]: "",
+                                  }));
+                                }}
+                                onChange={(event) => {
+                                  const value = event.currentTarget.value;
+                                  setActiveAllTemplateSlot(row.key);
+                                  setAllTemplateSearchTerms((current) => ({
+                                    ...current,
+                                    [row.key]: value,
+                                  }));
+                                }}
+                                onBlur={() => {
+                                  window.setTimeout(() => {
+                                    setActiveAllTemplateSlot((current) => current === row.key ? "" : current);
+                                    setAllTemplateSearchTerms((current) => {
+                                      const next = { ...current };
+                                      delete next[row.key];
+                                      return next;
+                                    });
+                                  }, 120);
+                                }}
+                                placeholder={selectedTemplateOptions.length > 0 ? "添加模板" : "待选择"}
+                              />
+                            </label>
+                            {options.length > 0 ? (
+                              <div className="template-option-list">
+                                {options.map((option) => (
+                                  <button
+                                    key={option.key}
+                                    type="button"
+                                    className={`template-option ${selectedOptions.some((selected) => selected.key === option.key) ? "active" : ""}`}
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      selectAllTemplate(row.key, option, row.matches);
+                                    }}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : isActive ? (
+                              <div className="template-option-list">
+                                <div className="template-option-empty">无匹配模板</div>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                       </article>
                     );

@@ -161,13 +161,14 @@ function App() {
     unresolvedAllProcessRows,
     allProcessGenerationFileCount,
     allTemplateSearchTerms,
-    activeAllTemplateRow,
+    activeAllTemplateSlot,
     setAllTemplateSearchTerms,
-    setActiveAllTemplateRow,
+    setActiveAllTemplateSlot,
     selectedAllProcessTemplates,
-    selectedAllTemplateOption,
+    selectedAllTemplateOptions,
     filteredAllTemplateOptions,
     selectAllTemplate,
+    removeAllTemplate,
   } = useAllProcessSelection({ selectedRecords, processManifest, allTemplateOptions });
 
   const archiveGenerationFileCount = useMemo(() => {
@@ -568,18 +569,19 @@ function App() {
               isGenerating={isGeneratingProcess}
               hasOutputDir={Boolean(outputDir)}
               allTemplateSearchTerms={allTemplateSearchTerms}
-              activeAllTemplateRow={activeAllTemplateRow}
+              activeAllTemplateSlot={activeAllTemplateSlot}
               onOpenInfo={() => setIsProcessInfoModalOpen(true)}
               onOpenTemplateManager={() => setIsTemplateManagerOpen(true)}
               onOpenBuiltInDir={() => void openBuiltInProcessTemplateDir()}
               onOpenUserDir={() => void openUserProcessTemplateDir()}
               onGenerate={generateAllProcess}
               onOpenOutputDir={openOutputDir}
-              setActiveAllTemplateRow={setActiveAllTemplateRow}
+              setActiveAllTemplateSlot={setActiveAllTemplateSlot}
               setAllTemplateSearchTerms={setAllTemplateSearchTerms}
-              selectedAllTemplateOption={selectedAllTemplateOption}
+              selectedAllTemplateOptions={selectedAllTemplateOptions}
               filteredAllTemplateOptions={filteredAllTemplateOptions}
               selectAllTemplate={selectAllTemplate}
+              removeAllTemplate={removeAllTemplate}
             />
           ) : null}
 

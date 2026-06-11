@@ -25,9 +25,9 @@ export function useAllProcessSelection({
   processManifest,
   allTemplateOptions,
 }: UseAllProcessSelectionOptions) {
-  const [manualAllTemplateValues, setManualAllTemplateValues] = useState<Record<string, string>>({});
+  const [manualAllTemplateValues, setManualAllTemplateValues] = useState<Record<string, string[]>>({});
   const [allTemplateSearchTerms, setAllTemplateSearchTerms] = useState<Record<string, string>>({});
-  const [activeAllTemplateRow, setActiveAllTemplateRow] = useState("");
+  const [activeAllTemplateSlot, setActiveAllTemplateSlot] = useState("");
 
   const allProcessRows = useMemo(() => {
     if (!processManifest) {
@@ -67,8 +67,9 @@ export function useAllProcessSelection({
   const unresolvedAllProcessRows = useMemo(
     () =>
       allProcessRows.filter((row) => {
-        const selectedKey = selectedAllTemplateKey(row.key, row.matches);
-        return !selectedKey || (!templateMatchFromKey(selectedKey, allTemplateOptions) && selectedKey !== NO_PROCESS_TEMPLATE_KEY);
+        const selectedKeys = selectedAllTemplateKeys(row.key, row.matches);
+        return selectedKeys.length === 0
+          || selectedKeys.some((selectedKey) => !templateMatchFromKey(selectedKey, allTemplateOptions) && selectedKey !== NO_PROCESS_TEMPLATE_KEY);
       }),
     [allProcessRows, allTemplateOptions, manualAllTemplateValues],
   );
@@ -76,49 +77,54 @@ export function useAllProcessSelection({
   const allProcessGenerationFileCount = useMemo(
     () =>
       allProcessRows.reduce((count, row) => {
-        const selectedKey = selectedAllTemplateKey(row.key, row.matches);
-        return templateMatchFromKey(selectedKey, allTemplateOptions) ? count + 1 : count;
+        const selectedKeys = selectedAllTemplateKeys(row.key, row.matches);
+        return count + selectedKeys.filter((selectedKey) => templateMatchFromKey(selectedKey, allTemplateOptions)).length;
       }, 0),
     [allProcessRows, allTemplateOptions, manualAllTemplateValues],
   );
 
   function selectedAllProcessTemplates(): ProcessTemplateSelection[] {
     return allProcessRows.flatMap((row) => {
-      const selectedKey = selectedAllTemplateKey(row.key, row.matches);
-      if (selectedKey === NO_PROCESS_TEMPLATE_KEY) {
-        return [];
-      }
+      const selectedKeys = selectedAllTemplateKeys(row.key, row.matches);
+      return selectedKeys.flatMap((selectedKey) => {
+        if (selectedKey === NO_PROCESS_TEMPLATE_KEY) {
+          return [];
+        }
 
-      const match = templateMatchFromKey(selectedKey, allTemplateOptions);
-      if (!match) {
-        return [];
-      }
+        const match = templateMatchFromKey(selectedKey, allTemplateOptions);
+        if (!match) {
+          return [];
+        }
 
-      return [{
-        archiveCode: row.record.archiveCode,
-        fileCode: row.item.fileCode,
-        sequence: row.item.sequence,
-        templateModule: match.templateModule,
-        template: match.template,
-      }];
+        return [{
+          archiveCode: row.record.archiveCode,
+          fileCode: row.item.fileCode,
+          sequence: row.item.sequence,
+          templateModule: match.templateModule,
+          template: match.template,
+        }];
+      });
     });
   }
 
-  function selectedAllTemplateKey(rowKey: string, matches: ProcessTemplateMatch[] = []): string {
+  function selectedAllTemplateKeys(rowKey: string, matches: ProcessTemplateMatch[] = []): string[] {
     if (Object.prototype.hasOwnProperty.call(manualAllTemplateValues, rowKey)) {
-      return manualAllTemplateValues[rowKey] ?? "";
+      return manualAllTemplateValues[rowKey] ?? [];
     }
 
-    return matches[0] ? processTemplateOptionKey(matches[0]) : NO_PROCESS_TEMPLATE_KEY;
+    return matches.length > 0 ? matches.map(processTemplateOptionKey) : [NO_PROCESS_TEMPLATE_KEY];
   }
 
-  function selectedAllTemplateOption(rowKey: string, matches: ProcessTemplateMatch[] = []): AllProcessTemplateOption | undefined {
-    const selectedKey = selectedAllTemplateKey(rowKey, matches);
-    return allTemplateOptions.find((option) => option.key === selectedKey);
+  function selectedAllTemplateOptions(rowKey: string, matches: ProcessTemplateMatch[] = []): AllProcessTemplateOption[] {
+    const selectedKeys = selectedAllTemplateKeys(rowKey, matches);
+    return selectedKeys.flatMap((selectedKey) => {
+      const option = allTemplateOptions.find((entry) => entry.key === selectedKey);
+      return option ? [option] : [];
+    });
   }
 
-  function filteredAllTemplateOptions(rowKey: string): AllProcessTemplateOption[] {
-    const keyword = (allTemplateSearchTerms[rowKey] ?? "").trim().toLowerCase();
+  function filteredAllTemplateOptions(slotKey: string): AllProcessTemplateOption[] {
+    const keyword = (allTemplateSearchTerms[slotKey] ?? "").trim().toLowerCase();
     if (!keyword) {
       return allTemplateOptions;
     }
@@ -126,16 +132,29 @@ export function useAllProcessSelection({
     return allTemplateOptions.filter((option) => option.searchText.includes(keyword));
   }
 
-  function selectAllTemplate(rowKey: string, option: AllProcessTemplateOption) {
+  function selectAllTemplate(rowKey: string, option: AllProcessTemplateOption, matches: ProcessTemplateMatch[] = []) {
+    const nextKeys = option.key === NO_PROCESS_TEMPLATE_KEY
+      ? [NO_PROCESS_TEMPLATE_KEY]
+      : selectedAllTemplateKeys(rowKey, matches)
+        .filter((currentKey) => currentKey !== NO_PROCESS_TEMPLATE_KEY && currentKey !== option.key)
+        .concat(option.key);
     setManualAllTemplateValues((current) => ({
       ...current,
-      [rowKey]: option.key,
+      [rowKey]: nextKeys,
     }));
     setAllTemplateSearchTerms((current) => ({
       ...current,
       [rowKey]: "",
     }));
-    setActiveAllTemplateRow("");
+    setActiveAllTemplateSlot("");
+  }
+
+  function removeAllTemplate(rowKey: string, optionKey: string, matches: ProcessTemplateMatch[] = []) {
+    const nextKeys = selectedAllTemplateKeys(rowKey, matches).filter((currentKey) => currentKey !== optionKey);
+    setManualAllTemplateValues((current) => ({
+      ...current,
+      [rowKey]: nextKeys.length > 0 ? nextKeys : [NO_PROCESS_TEMPLATE_KEY],
+    }));
   }
 
   return {
@@ -144,12 +163,13 @@ export function useAllProcessSelection({
     unresolvedAllProcessRows,
     allProcessGenerationFileCount,
     allTemplateSearchTerms,
-    activeAllTemplateRow,
+    activeAllTemplateSlot,
     setAllTemplateSearchTerms,
-    setActiveAllTemplateRow,
+    setActiveAllTemplateSlot,
     selectedAllProcessTemplates,
-    selectedAllTemplateOption,
+    selectedAllTemplateOptions,
     filteredAllTemplateOptions,
     selectAllTemplate,
+    removeAllTemplate,
   };
 }

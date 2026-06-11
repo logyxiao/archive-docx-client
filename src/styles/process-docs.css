@@ -272,6 +272,60 @@
   width: 100%;
 }
 
+.template-tag-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.template-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.template-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 26px;
+  gap: 6px;
+  padding: 4px 6px 4px 9px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background-color: var(--primary-light);
+  color: var(--primary);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.template-tag > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-tag button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  background: transparent;
+  color: currentColor;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.template-tag button:hover {
+  background-color: rgba(37, 99, 235, 0.12);
+}
+
 .template-search-field {
   display: flex;
   align-items: center;

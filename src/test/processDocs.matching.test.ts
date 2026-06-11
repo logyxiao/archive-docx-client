@@ -6,7 +6,7 @@ import {
   matchingAllProcessTemplates,
   type ProcessTemplate,
 } from "../lib/processDocs";
-import { createSuixiGridConnectedElectricalRecord, fileNames, processRecord, stubProcessFetch } from "./processDocsTestUtils";
+import { createSubunitSummaryFixtureItems, createSuixiGridConnectedElectricalRecord, fileNames, processRecord, stubProcessFetch } from "./processDocsTestUtils";
 
 describe("template matching", () => {
   it("matches process templates only by explicit title rules", async () => {
@@ -89,6 +89,23 @@ describe("template matching", () => {
     expect(result.skipped).toEqual([]);
     expect(result.errors).toEqual([]);
     expect(fileNames(paths)).toEqual(["99、5028G01-SG-ZHHC-TEST-099高明分布式项目 需要人工选择模板的文件.docx"]);
+  });
+
+  it("keeps all default matches for quality application and acceptance record titles", async () => {
+    stubProcessFetch();
+    const manifest = await loadProcessManifest();
+    const record = {
+      ...processRecord,
+      items: createSubunitSummaryFixtureItems(),
+    };
+    const item = record.items.find((entry) => entry.title.includes("1#厂房支架安装"))!;
+
+    const matches = matchingAllProcessTemplates(record, item, manifest.templates).map((match) => match.template.templateFile);
+
+    expect(matches).toEqual([
+      "厂房支架安装分项工程质量验收表.xlsx",
+      "分项工程报验申请单.docx",
+    ]);
   });
 
   it("prioritizes enabled user templates by configured keywords", () => {
