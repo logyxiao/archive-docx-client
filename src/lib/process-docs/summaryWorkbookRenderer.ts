@@ -43,9 +43,6 @@ export function renderSummaryWorkbook(
       : isSubunitSummaryTemplate(processTemplate)
       ? fillSubunitQualityWorkbook(xml, record, item, processTemplate, contextRecords)
       : fillDivisionQualityWorkbook(xml, record, item, isSwitchStation);
-    if (!isDivisionEvaluation) {
-      xml = preserveSummaryQualityPrintLayout(xml);
-    }
   }
   if (!isDivisionEvaluation) {
     xml = setInlineStringCell(xml, "G7", fields.generalContractorUnit);
@@ -60,9 +57,6 @@ export function renderSummaryWorkbook(
   }
 
   zip.file("xl/worksheets/sheet1.xml", xml);
-  if (item && !isDivisionEvaluation) {
-    preserveSummaryWorkbookPrintArea(zip);
-  }
   return zip.generate({ type: "uint8array", compression: "DEFLATE" });
 }
 
@@ -146,96 +140,6 @@ function fillDivisionEvaluationWorkbook(
   }
 
   return nextXml;
-}
-
-function preserveSummaryQualityPrintLayout(xml: string): string {
-  let nextXml = xml.replace(
-    /<pageSetUpPr(?:\s[^>]*)?\/>/,
-    '<pageSetUpPr fitToPage="1"/>',
-  );
-
-  if (!/<pageSetUpPr\b/.test(nextXml)) {
-    nextXml = nextXml.replace(/<sheetPr>/, '<sheetPr><pageSetUpPr fitToPage="1"/>');
-  }
-
-  nextXml = upsertPageSetup(nextXml);
-  return nextXml;
-}
-
-function preserveSummaryWorkbookPrintArea(zip: PizZip) {
-  const workbook = zip.file("xl/workbook.xml");
-  if (!workbook) {
-    return;
-  }
-
-  const workbookXml = workbook.asText();
-  const sheetName = workbookXml.match(/<sheet[^>]*name="([^"]+)"/)?.[1] ?? "Sheet1";
-  const printArea = `<definedName name="_xlnm.Print_Area" localSheetId="0">${sheetName}!$A$1:$AL$30</definedName>`;
-  let nextWorkbookXml = workbookXml;
-  if (nextWorkbookXml.includes("_xlnm.Print_Area")) {
-    nextWorkbookXml = nextWorkbookXml.replace(/<definedName name="_xlnm\.Print_Area"[^>]*>[\s\S]*?<\/definedName>/, printArea);
-  } else if (/<definedNames\/>|<definedNames><\/definedNames>/.test(nextWorkbookXml)) {
-    nextWorkbookXml = nextWorkbookXml.replace(/<definedNames\/>|<definedNames><\/definedNames>/, `<definedNames>${printArea}</definedNames>`);
-  } else {
-    nextWorkbookXml = nextWorkbookXml.replace("</workbook>", `<definedNames>${printArea}</definedNames></workbook>`);
-  }
-
-  zip.file("xl/workbook.xml", nextWorkbookXml);
-}
-
-function upsertSelfClosingElement(xml: string, tagName: string, elementXml: string, insertBefore: string): string {
-  const existing = new RegExp(`<${tagName}\\b[^>]*/>`);
-  if (existing.test(xml)) {
-    return xml.replace(existing, elementXml);
-  }
-
-  const insertIndex = xml.indexOf(insertBefore);
-  if (insertIndex === -1) {
-    return xml;
-  }
-  return `${xml.slice(0, insertIndex)}${elementXml}${xml.slice(insertIndex)}`;
-}
-
-function upsertPageSetup(xml: string): string {
-  const existing = /<pageSetup\b([^>]*)\/>/;
-  if (existing.test(xml)) {
-    return xml.replace(existing, (_match, attrs: string) => {
-      const cleanAttrs = attrs.replace(/\s+scale="[^"]*"/g, "");
-      const nextAttrs = upsertXmlAttribute(
-        upsertXmlAttribute(
-          upsertXmlAttribute(
-            upsertXmlAttribute(
-              upsertXmlAttribute(cleanAttrs, "paperSize", "9"),
-              "fitToWidth",
-              "1",
-            ),
-            "fitToHeight",
-            "1",
-          ),
-          "horizontalDpi",
-          "600",
-        ),
-        "verticalDpi",
-        "600",
-      );
-      return `<pageSetup${nextAttrs}/>`;
-    });
-  }
-
-  return upsertSelfClosingElement(
-    xml,
-    "pageSetup",
-    '<pageSetup paperSize="9" fitToWidth="1" fitToHeight="1" horizontalDpi="600" verticalDpi="600"/>',
-    "</worksheet>",
-  );
-}
-
-function upsertXmlAttribute(attrs: string, name: string, value: string): string {
-  const pattern = new RegExp(`\\s${name}="[^"]*"`);
-  if (pattern.test(attrs)) {
-    return attrs.replace(pattern, ` ${name}="${value}"`);
-  }
-  return `${attrs} ${name}="${value}"`;
 }
 
 function subunitQualitySummary(record: ArchiveRecord, item: ArchiveItem, template: ProcessTemplate | undefined, contextRecords: ArchiveRecord[]): {
